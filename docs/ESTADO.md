@@ -26,6 +26,7 @@ Fecha de actualización: 2026-09-29.
 - [x] Mapa móvil vertical/horizontal, dibujo por puntos y a mano alzada, edición, borrado, deshacer y confirmación.
 - [x] Sobrezoom hasta nivel 24 reutilizando la última tesela nativa, con desplazamiento confinado al recorte de ortofoto para evitar áreas vacías.
 - [x] Ortofoto sin capa translúcida y pantalla final de “Respuesta recibida” después de cada envío.
+- [x] Ortofoto realzada sin velos de relleno; el dibujo a mano muestra el trazo en vivo, se cierra al regresar al inicio y simplifica automáticamente los vértices para facilitar la edición.
 - [x] Identidad visual actualizada con la paleta institucional `#096e74`, `#44bec6`, `#bcd3d8`, `#7e9cac`, `#162f3e`, `#35596b`, `#949cac`, `#96a4ac`, `#61808e` y `#4c6674`.
 - [x] Borrador en `sessionStorage` y reintento tras error de red.
 - [x] Validación Polygon WGS84, 3–100 vértices, cierre, autointersección, área y distancia máxima.

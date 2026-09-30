@@ -105,10 +105,14 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     points = [(150, 180), (215, 180), (215, 245), (150, 245), (150, 180)]
                     page.mouse.move(map_box["x"] + points[0][0], map_box["y"] + points[0][1])
                     page.mouse.down()
-                    for px, py in points[1:]:
-                        page.mouse.move(map_box["x"] + px, map_box["y"] + py, steps=8)
-                    page.mouse.up()
+                    page.mouse.move(map_box["x"] + points[1][0], map_box["y"] + points[1][1], steps=16)
+                    assert page.locator('.leaflet-overlay-pane path[stroke="#44bec6"]').count() >= 1
+                    for px, py in points[2:]:
+                        page.mouse.move(map_box["x"] + px, map_box["y"] + py, steps=16)
                     assert page.locator("#confirmButton").is_enabled()
+                    page.mouse.up()
+                    draft = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert 4 <= len(draft["coordinates"][0]) <= 12
                     page.locator('[data-tool="edit"]').click()
                     failed = {"done": False}
 
