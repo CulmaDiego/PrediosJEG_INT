@@ -145,5 +145,9 @@ class RateLimiter:
                 raise HTTPException(status_code=429, detail="Demasiados intentos. Espere un momento.")
             entries.append(now)
 
+    def reset(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
 
 rate_limiter = RateLimiter()

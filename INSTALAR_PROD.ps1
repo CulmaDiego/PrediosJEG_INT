@@ -2,7 +2,8 @@ param(
     [string]$RepoUrl = 'https://github.com/CulmaDiego/PrediosJEG.git',
     [string]$InstallDir = 'C:\PrediosRemotos\app',
     [string]$DataDir = 'D:\PrediosRemotos\datos',
-    [string]$OrthoDir = 'D:\PrediosRemotos\ortofotos'
+    [string]$OrthoDir = 'D:\PrediosRemotos\ortofotos',
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.1.0'
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Instale Git para Windows.' }
@@ -10,11 +11,17 @@ if (-not (Test-Path -LiteralPath 'C:\Program Files\QGIS 3.44.3\bin\gdalinfo.exe'
 if (-not (Test-Path -LiteralPath $InstallDir)) { git clone $RepoUrl $InstallDir }
 $resolvedInstall = (Resolve-Path -LiteralPath $InstallDir).Path
 Set-Location -LiteralPath $resolvedInstall
+if (git status --porcelain) { throw 'El checkout de instalación contiene cambios locales. Deténgase y revíselos.' }
+git fetch --tags --prune origin
+git rev-parse --verify "refs/tags/$Version" 2>$null
+if ($LASTEXITCODE -ne 0) { throw "La etiqueta $Version no existe en GitHub." }
+git checkout --detach $Version
 New-Item -ItemType Directory -Force -Path $DataDir,$OrthoDir,(Join-Path $DataDir 'config'),(Join-Path $DataDir 'logs'),(Join-Path $DataDir 'backups') | Out-Null
 $envFile = Join-Path $DataDir 'config\production.env'
 if (-not (Test-Path -LiteralPath $envFile)) {
     $bytes = New-Object byte[] 48
-    [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     $secret = [Convert]::ToBase64String($bytes)
     $publicUrl = Read-Host 'URL pública HTTPS que usará Cloudflare Tunnel'
     $lines = @('PREDIOS_ENV=production',"PREDIOS_DATA_DIR=$DataDir","PREDIOS_ORTHOPHOTO_ROOT=$OrthoDir","PREDIOS_SECRET_KEY=$secret","PREDIOS_PUBLIC_BASE_URL=$publicUrl",'PREDIOS_COOKIE_SECURE=true','PREDIOS_QGIS_ROOT=C:\Program Files\QGIS 3.44.3','PREDIOS_ASSET_MODE=local')

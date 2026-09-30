@@ -31,6 +31,7 @@ from .models import (
     Municipality,
     OrthophotoSource,
     Person,
+    PublicLink,
     TileWindow,
     utcnow,
 )
@@ -111,6 +112,116 @@ def _links_workbook(people: list[Person], settings: Settings) -> io.BytesIO:
     workbook.save(output)
     output.seek(0)
     return output
+
+
+def _quarantine_artifacts(paths: list[Path], settings: Settings) -> tuple[Path | None, list[tuple[Path, Path]]]:
+    allowed_roots = [(settings.data_dir / name).resolve() for name in ("tiles", "imports", "exports")]
+    safe_paths: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in paths:
+        resolved = candidate.resolve()
+        if resolved in seen or not resolved.exists():
+            continue
+        if not any(resolved != root and resolved.is_relative_to(root) for root in allowed_roots):
+            raise RuntimeError(f"Ruta de datos fuera de las carpetas permitidas: {resolved}")
+        seen.add(resolved)
+        safe_paths.append(resolved)
+    if not safe_paths:
+        return None, []
+    quarantine = settings.data_dir / "tmp" / f"eliminacion_{uuid.uuid4().hex}"
+    quarantine.mkdir(parents=True, exist_ok=False)
+    moved: list[tuple[Path, Path]] = []
+    try:
+        for index, original in enumerate(safe_paths):
+            destination = quarantine / f"{index:04d}_{original.name}"
+            shutil.move(str(original), str(destination))
+            moved.append((original, destination))
+    except Exception:
+        for original, destination in reversed(moved):
+            original.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(destination), str(original))
+        shutil.rmtree(quarantine, ignore_errors=True)
+        raise
+    return quarantine, moved
+
+
+def _restore_quarantine(quarantine: Path | None, moved: list[tuple[Path, Path]]) -> None:
+    for original, destination in reversed(moved):
+        if destination.exists():
+            original.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(destination), str(original))
+    if quarantine:
+        shutil.rmtree(quarantine, ignore_errors=True)
+
+
+def _delete_people(db: Session, request: Request, actor: str, person_ids: set[int], settings: Settings) -> int:
+    if not person_ids:
+        return 0
+    people = list(db.scalars(select(Person).where(Person.id.in_(person_ids))).all())
+    if not people:
+        return 0
+    actual_ids = {person.id for person in people}
+    phones = {person.phone for person in people}
+    municipality_ids = {person.municipality_id for person in people}
+    fully_deleted_municipalities = {
+        municipality_id
+        for municipality_id in municipality_ids
+        if not db.scalar(
+            select(func.count())
+            .select_from(Person)
+            .where(Person.municipality_id == municipality_id, Person.id.not_in(actual_ids))
+        )
+    }
+    windows = list(db.scalars(select(TileWindow).where(TileWindow.person_id.in_(actual_ids))).all())
+    batches = list(db.scalars(select(ImportBatch).where(ImportBatch.municipality_id.in_(municipality_ids))).all())
+    related_batches: list[ImportBatch] = []
+    for batch in batches:
+        try:
+            rows = json.loads(batch.rows_json)
+        except (TypeError, json.JSONDecodeError):
+            rows = []
+        if batch.municipality_id in fully_deleted_municipalities or any(
+            str(row.get("phone", "")) in phones for row in rows if isinstance(row, dict)
+        ):
+            related_batches.append(batch)
+    jobs = list(db.scalars(select(Job).where(Job.job_type == "PREPARE_WINDOW")).all())
+    related_job_ids: set[int] = set()
+    for job in jobs:
+        try:
+            if int(json.loads(job.payload_json).get("person_id", 0)) in actual_ids:
+                related_job_ids.add(job.id)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+    artifacts = [settings.data_dir / "tiles" / window.relative_dir for window in windows if window.relative_dir]
+    artifacts.extend(settings.data_dir / "imports" / batch.stored_name for batch in related_batches)
+    export_root = settings.data_dir / "exports"
+    artifacts.extend(export_root.iterdir())
+    quarantine, moved = _quarantine_artifacts(artifacts, settings)
+    try:
+        db.execute(delete(AuditLog).where(AuditLog.person_id.in_(actual_ids)))
+        db.execute(delete(PublicLink).where(PublicLink.person_id.in_(actual_ids)))
+        db.execute(delete(DrawingVersion).where(DrawingVersion.person_id.in_(actual_ids)))
+        db.execute(delete(TileWindow).where(TileWindow.person_id.in_(actual_ids)))
+        if related_job_ids:
+            db.execute(delete(Job).where(Job.id.in_(related_job_ids)))
+        if related_batches:
+            db.execute(delete(ImportBatch).where(ImportBatch.id.in_({batch.id for batch in related_batches})))
+        db.execute(delete(Person).where(Person.id.in_(actual_ids)))
+        _audit(
+            db,
+            request,
+            "PERSONAS_ELIMINADAS",
+            actor,
+            details={"cantidad": len(actual_ids), "municipios": sorted(municipality_ids)},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        _restore_quarantine(quarantine, moved)
+        raise
+    if quarantine:
+        shutil.rmtree(quarantine)
+    return len(actual_ids)
 
 
 def create_app(settings: Settings | None = None, create_schema: bool = False) -> FastAPI:
@@ -235,7 +346,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     def municipalities_page(request: Request, db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
         municipalities = db.scalars(select(Municipality).order_by(Municipality.name)).all()
-        return render(request, "municipalities.html", {"admin": session.admin, "municipalities": municipalities})
+        people_counts = dict(db.execute(select(Person.municipality_id, func.count(Person.id)).group_by(Person.municipality_id)).all())
+        return render(request, "municipalities.html", {"admin": session.admin, "municipalities": municipalities, "people_counts": people_counts})
 
     @app.post("/admin/municipios")
     def municipality_create(request: Request, name: str = Form(...), csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
@@ -273,6 +385,22 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         db.commit()
         return RedirectResponse("/admin/municipios", status_code=303)
 
+    @app.post("/admin/municipios/{municipality_id}/personas/eliminar")
+    def municipality_people_delete(
+        municipality_id: int,
+        request: Request,
+        csrf_token: str = Form(...),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        municipality = db.get(Municipality, municipality_id)
+        if not municipality:
+            raise HTTPException(404)
+        person_ids = set(db.scalars(select(Person.id).where(Person.municipality_id == municipality_id)).all())
+        deleted_count = _delete_people(db, request, session.admin.username, person_ids, settings)
+        return RedirectResponse(f"/admin/municipios?eliminadas={deleted_count}", status_code=303)
+
     @app.get("/admin/personas", response_class=HTMLResponse)
     def people_page(
         request: Request,
@@ -301,6 +429,21 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         municipalities = db.scalars(select(Municipality).order_by(Municipality.name)).all()
         return render(request, "people.html", {"admin": session.admin, "people": people, "municipalities": municipalities, "filters": {"q": q, "status": status, "municipality_id": municipality_id}, "page": page, "pages": max(1, (total + 24) // 25)})
 
+    @app.post("/admin/personas/eliminar")
+    def people_delete_selected(
+        request: Request,
+        csrf_token: str = Form(...),
+        person_ids: list[int] | None = Form(None),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        selected = {person_id for person_id in person_ids or [] if person_id > 0}
+        if not selected:
+            return RedirectResponse("/admin/personas?eliminadas=0", status_code=303)
+        deleted_count = _delete_people(db, request, session.admin.username, selected, settings)
+        return RedirectResponse(f"/admin/personas?eliminadas={deleted_count}", status_code=303)
+
     @app.get("/admin/personas/{person_id}", response_class=HTMLResponse)
     def person_detail(person_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
@@ -328,6 +471,15 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         _audit(db, request, "RESPUESTA_REINICIADA", session.admin.username, person_id, {"versiones_eliminadas": deleted_versions})
         db.commit()
         return RedirectResponse(f"/admin/personas/{person_id}?reiniciado=1", status_code=303)
+
+    @app.post("/admin/personas/{person_id}/eliminar")
+    def person_delete(person_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        if not db.get(Person, person_id):
+            raise HTTPException(404)
+        deleted_count = _delete_people(db, request, session.admin.username, {person_id}, settings)
+        return RedirectResponse(f"/admin/personas?eliminadas={deleted_count}", status_code=303)
 
     @app.get("/admin/enlaces")
     def links_download(request: Request, municipality_id: int | None = None, db: Session = Depends(get_db)) -> Response:
@@ -460,7 +612,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         return RedirectResponse("/admin/ortofotos", status_code=303)
 
     def current_features(db: Session, municipality_id: int | None) -> list[dict]:
-        query = select(DrawingVersion, Person, Municipality).join(Person, DrawingVersion.person_id == Person.id).join(Municipality, Person.municipality_id == Municipality.id).where(DrawingVersion.is_current.is_(True))
+        query = select(DrawingVersion, Person, Municipality).join(Person, DrawingVersion.person_id == Person.id).join(Municipality, Person.municipality_id == Municipality.id).where(DrawingVersion.is_current.is_(True), Person.active.is_(True))
         if municipality_id:
             query = query.where(Person.municipality_id == municipality_id)
         return [
@@ -565,7 +717,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.get("/p/{token}/tiles/{z}/{x}/{y}.png")
     def private_tile(token: str, z: int, x: int, y: int, request: Request, db: Session = Depends(get_db)) -> Response:
         link = find_public_link(db, token, settings)
-        if not link:
+        if not link or not link.person.active:
             raise HTTPException(404)
         window = db.get(TileWindow, link.person_id)
         if not window or window.status != "LISTO" or not window.relative_dir:

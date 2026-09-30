@@ -14,11 +14,12 @@ os.environ.setdefault("PREDIOS_SECRET_KEY", "bootstrap-test-secret-key")
 from app.config import Settings
 from app.main import create_app
 from app.models import Admin, Municipality, Person, PublicLink
-from app.security import hash_password, sha256
+from app.security import hash_password, rate_limiter, sha256
 
 
 @pytest.fixture()
 def test_app(tmp_path: Path):
+    rate_limiter.reset()
     data = tmp_path / "data"
     orthos = tmp_path / "orthos"
     orthos.mkdir()

@@ -26,5 +26,5 @@
 <dialog id="confirmDialog"><div class="dialog-card"><p class="eyebrow">Confirmación</p><h2>¿El contorno está correcto?</h2><p>Podrá volver a abrir este enlace y enviar una versión nueva si necesita corregirlo.</p><div class="button-row"><button class="button secondary" data-close-dialog type="button">Seguir editando</button><button id="sendButton" class="button primary" type="button">Sí, enviar</button></div></div></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 {% if settings.asset_mode == 'local' %}<script src="/static/vendor/leaflet/leaflet.js"></script><script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>{% else %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.min.js"></script>{% endif %}
-<script src="/static/public-map.js?v=6"></script>
+<script src="/static/public-map.js?v=8"></script>
 {% endblock %}

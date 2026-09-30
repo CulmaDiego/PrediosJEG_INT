@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import time
@@ -79,6 +80,7 @@ def scan_catalog(db: Session, settings: Settings, job: Job) -> None:
 
 
 def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) -> None:
+    job_id = job.id
     person = db.get(Person, person_id)
     if not person or person.reference_lon is None or person.reference_lat is None:
         raise RuntimeError("La persona no existe o no tiene coordenadas")
@@ -118,7 +120,15 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     if warp.returncode != 0:
         raise RuntimeError(f"gdalwarp: {warp.stderr.strip()}")
     job.progress = 35
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        if db.get(Person, person_id) is None or db.get(Job, job_id) is None:
+            vrt_path.unlink(missing_ok=True)
+            shutil.rmtree(output_dir, ignore_errors=True)
+            return
+        raise
     gdal2tiles = qgis_command(settings, "gdal2tiles")
     tiles = subprocess.run(
         [*gdal2tiles, "--xyz", "--webviewer=none", "--processes=1", "--zoom", f"{settings.tile_min_zoom}-{settings.tile_max_zoom}", str(vrt_path), str(output_dir)],
@@ -129,15 +139,19 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     )
     vrt_path.unlink(missing_ok=True)
     if tiles.returncode != 0:
-        import shutil
-
         shutil.rmtree(output_dir, ignore_errors=True)
         raise RuntimeError(f"gdal2tiles: {tiles.stderr.strip()}")
+    db.expire_all()
+    person = db.get(Person, person_id)
+    job = db.get(Job, job_id)
+    if person is None or job is None:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        return
+    window = db.get(TileWindow, person_id) or TileWindow(person_id=person_id)
+    db.add(window)
     if window.relative_dir:
         old = (settings.data_dir / "tiles" / window.relative_dir).resolve()
         if old.is_dir() and old != output_dir.resolve():
-            import shutil
-
             shutil.rmtree(old)
     window.source_id = source.id
     window.relative_dir = relative_dir
@@ -147,7 +161,14 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     window.error = None
     person.orthophoto_status = "LISTO"
     person.orthophoto_error = None
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        if db.get(Person, person_id) is None:
+            shutil.rmtree(output_dir, ignore_errors=True)
+            return
+        raise
 
 
 def execute_job(db: Session, settings: Settings, job: Job) -> None:
@@ -169,16 +190,21 @@ def run(once: bool = False) -> int:
         with factory() as db:
             job = claim_job(db, worker_id)
             if job:
+                job_id = job.id
                 try:
                     execute_job(db, settings, job)
-                    job = db.get(Job, job.id)
+                    job = db.get(Job, job_id)
+                    if job is None:
+                        continue
                     job.status = "COMPLETADO"
                     job.progress = 100
                     job.error = None
                     db.commit()
                 except Exception as exc:
                     db.rollback()
-                    failed = db.get(Job, job.id)
+                    failed = db.get(Job, job_id)
+                    if failed is None:
+                        continue
                     failed.status = "ERROR"
                     failed.error = str(exc)[:4000]
                     if failed.job_type == "PREPARE_WINDOW":

@@ -9,7 +9,8 @@ New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 $secretFile = Join-Path $configDir 'dev-secret.txt'
 if (-not (Test-Path -LiteralPath $secretFile)) {
     $bytes = New-Object byte[] 48
-    [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     [IO.File]::WriteAllText($secretFile, [Convert]::ToBase64String($bytes))
 }
 $env:PREDIOS_SECRET_KEY = [IO.File]::ReadAllText($secretFile).Trim()

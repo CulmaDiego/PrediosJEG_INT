@@ -50,6 +50,8 @@ Fecha de actualización: 2026-09-29.
 - [x] Instalación y tareas automáticas de Windows.
 - [x] Actualización por etiqueta, respaldo verificado, comprobaciones y restauración completa ante fallo.
 - [x] Guía de Cloudflare Tunnel sin secretos en Git.
+- [x] Eliminación completa individual, por selección y por municipio, con confirmación e invalidación de exportaciones.
+- [x] Guía operativa paso a paso para primera instalación y actualización de producción.
 - Verificación local: copia consistente, `PRAGMA integrity_check` y restauración conjunta de SQLite y teselas pasaron la prueba automatizada.
 - [ ] Ensayo en el PC de empresa: instalación inicial, actualización desde una etiqueta real, restauración y flujo público completo.
 

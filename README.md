@@ -55,7 +55,8 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
   -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG.git' `
   -InstallDir 'C:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
-  -OrthoDir 'D:\PrediosRemotos\ortofotos'
+  -OrthoDir 'D:\PrediosRemotos\ortofotos' `
+  -Version 'v0.1.0'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -110,3 +111,5 @@ No ponga bases, Excel reales, teselas, exportaciones, respaldos, logs, secretos 
 ```
 
 El avance y la evidencia de verificación se mantienen en [docs/ESTADO.md](docs/ESTADO.md).
+
+Para instalar o actualizar el PC definitivo, siga la [guía paso a paso de producción](docs/PASO_A_PRODUCCION.md).

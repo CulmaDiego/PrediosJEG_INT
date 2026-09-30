@@ -131,7 +131,10 @@
     map.dragging.enable();
     if (name === 'polygon') map.pm.enableDraw('Polygon', { snappable: false, finishOn: 'dblclick', pathOptions: { color: '#44bec6', fill: false, weight: 4 } });
     if (name === 'freehand') { freehand = true; map.dragging.disable(); notify('Siga el borde y vuelva al punto inicial para cerrar'); }
-    if (name === 'edit' && activeLayer) { activeLayer.pm.enable({ snappable: false, hideMiddleMarkers: true }); notify('Arrastre los puntos grandes para corregir'); }
+    if (name === 'edit' && activeLayer) {
+      activeLayer.pm.enable({ snappable: false, hideMiddleMarkers: false });
+      notify('Mueva los puntos grandes o use los pequeños para afinar el contorno');
+    }
     if (name === 'delete') {
       if (activeLayer) map.removeLayer(activeLayer);
       activeLayer = null; history = []; sessionStorage.removeItem(draftKey);

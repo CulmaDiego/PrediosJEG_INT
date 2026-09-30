@@ -16,6 +16,11 @@
       <p>Elimina todas las versiones dibujadas y devuelve la persona a pendiente. El enlace no cambia.</p>
       <button class="button ghost" type="submit" data-confirm="Se eliminarán todas las versiones dibujadas de esta persona. El enlace seguirá siendo el mismo. ¿Desea continuar?">Reiniciar respuesta</button>
     </form>
+    <form method="post" action="/admin/personas/{{ person.id }}/eliminar" class="danger-zone">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <p>Elimina definitivamente la persona, su enlace público, todas las versiones, teselas, trabajos y archivos asociados.</p>
+      <button class="button danger" type="submit" data-confirm="Esta acción es permanente. Se eliminarán la persona, su enlace, dibujos, teselas y archivos derivados. También se invalidarán las exportaciones existentes. ¿Desea continuar?">Eliminar persona definitivamente</button>
+    </form>
   </section>
   <section class="panel"><div class="panel-head"><h2>Versiones de dibujo</h2></div>{% if drawings %}<div class="version-list">{% for drawing in drawings %}<div><strong>Versión {{ drawing.version }}</strong><span>{{ '%.2f'|format(drawing.area_m2) }} m²</span><small>{{ drawing.created_at }}{% if drawing.is_current %} · Vigente{% endif %}</small></div>{% endfor %}</div>{% else %}<p class="empty">Todavía no hay dibujos.</p>{% endif %}</section>
   <section class="panel full-span"><div class="panel-head"><h2>Historial</h2></div><div class="timeline">{% for event in events %}<div><span></span><p><strong>{{ event.action.replace('_',' ') }}</strong><small>{{ event.created_at }} · {{ event.actor }}</small></p></div>{% else %}<p class="empty">Sin eventos.</p>{% endfor %}</div></section>

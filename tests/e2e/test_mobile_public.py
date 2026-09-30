@@ -129,9 +129,11 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     expect(page.locator('[data-tool="move"]')).to_have_class("tool active")
                     assert page.locator(".marker-icon").count() == 0
                     page.locator('[data-tool="edit"]').click()
-                    assert page.locator(".marker-icon-middle").count() == 0
-                    assert 3 <= page.locator(".marker-icon").count() <= 12
-                    assert page.locator(".marker-icon").first.bounding_box()["width"] >= 24
+                    vertex_count = len(draft["coordinates"][0]) - 1
+                    expect(page.locator(".marker-icon-middle:visible")).to_have_count(vertex_count)
+                    assert page.locator(".marker-icon:not(.marker-icon-middle):visible").count() == vertex_count
+                    assert page.locator(".marker-icon:not(.marker-icon-middle):visible").first.bounding_box()["width"] >= 24
+                    assert page.locator(".marker-icon-middle:visible").first.bounding_box()["width"] == 14
                     failed = {"done": False}
 
                     def fail_once(route):

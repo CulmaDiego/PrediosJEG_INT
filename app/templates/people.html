@@ -2,6 +2,7 @@
 {% block title %}Personas · Predios Remotos{% endblock %}
 {% block content %}
 <div class="page-head"><div><p class="eyebrow">Seguimiento</p><h1>Personas</h1></div><div class="button-row"><a class="button secondary" href="/admin/enlaces{% if filters.municipality_id %}?municipality_id={{ filters.municipality_id }}{% endif %}">Descargar enlaces</a><a class="button primary" href="/admin/importar">Importar archivo</a></div></div>
+{% if request.query_params.get('eliminadas') == '0' %}<div class="alert danger" role="alert">Seleccione al menos una persona para eliminar.</div>{% elif request.query_params.get('eliminadas') %}<div class="alert success" role="status">Se eliminaron completamente {{ request.query_params.get('eliminadas') }} persona(s), junto con sus enlaces, dibujos y archivos derivados.</div>{% endif %}
 <form class="filter-bar" method="get">
   <label>Buscar<input name="q" value="{{ filters.q }}" placeholder="Nombre o celular"></label>
   <label>Municipio<select name="municipality_id"><option value="">Todos</option>{% for municipality in municipalities %}<option value="{{ municipality.id }}" {% if filters.municipality_id == municipality.id %}selected{% endif %}>{{ municipality.name }}</option>{% endfor %}</select></label>
@@ -9,10 +10,14 @@
   <button class="button secondary" type="submit">Filtrar</button>
 </form>
 <section class="panel table-panel">
+  <form method="post" action="/admin/personas/eliminar" data-selection-form>
+  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+  {% if people %}<div class="bulk-actions"><label><input type="checkbox" data-select-all> Seleccionar esta página</label><span><strong data-selected-count>0</strong> seleccionada(s)</span><button class="button danger small" type="submit" data-confirm-selected disabled>Eliminar seleccionadas</button></div>{% endif %}
   <div class="responsive-table">
-    <table><thead><tr><th>Persona</th><th>Municipio</th><th>Estado</th><th>Último acceso</th><th>Respuesta</th><th>Versión</th><th></th></tr></thead>
-    <tbody>{% for person in people %}<tr><td data-label="Persona"><strong>{{ person.name }}</strong><small>{{ person.phone }}</small></td><td data-label="Municipio">{{ person.municipality.name }}</td><td data-label="Estado"><span class="status status-{{ person.status|lower }}">{{ person.status.replace('_',' ') }}</span>{% if person.orthophoto_status == 'SIN_ORTOFOTO' %}<small class="error-text">Sin ortofoto</small>{% endif %}</td><td data-label="Último acceso">{{ person.last_opened_at.strftime('%Y-%m-%d %H:%M') if person.last_opened_at else '—' }}</td><td data-label="Respuesta">{{ person.responded_at.strftime('%Y-%m-%d %H:%M') if person.responded_at else '—' }}</td><td data-label="Versión">{{ person.drawing_version or '—' }}</td><td><a class="button ghost small" href="/admin/personas/{{ person.id }}">Detalle</a></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay resultados para estos filtros.</td></tr>{% endfor %}</tbody></table>
+    <table><thead><tr><th aria-label="Seleccionar"></th><th>Persona</th><th>Municipio</th><th>Estado</th><th>Último acceso</th><th>Respuesta</th><th>Versión</th><th></th></tr></thead>
+    <tbody>{% for person in people %}<tr><td data-label="Seleccionar"><input class="row-selector" type="checkbox" name="person_ids" value="{{ person.id }}" aria-label="Seleccionar a {{ person.name }}" data-person-select></td><td data-label="Persona"><strong>{{ person.name }}</strong><small>{{ person.phone }}</small></td><td data-label="Municipio">{{ person.municipality.name }}</td><td data-label="Estado"><span class="status status-{{ person.status|lower }}">{{ person.status.replace('_',' ') }}</span>{% if person.orthophoto_status == 'SIN_ORTOFOTO' %}<small class="error-text">Sin ortofoto</small>{% endif %}</td><td data-label="Último acceso">{{ person.last_opened_at.strftime('%Y-%m-%d %H:%M') if person.last_opened_at else '—' }}</td><td data-label="Respuesta">{{ person.responded_at.strftime('%Y-%m-%d %H:%M') if person.responded_at else '—' }}</td><td data-label="Versión">{{ person.drawing_version or '—' }}</td><td><a class="button ghost small" href="/admin/personas/{{ person.id }}">Detalle</a></td></tr>{% else %}<tr><td colspan="8" class="empty">No hay resultados para estos filtros.</td></tr>{% endfor %}</tbody></table>
   </div>
+  </form>
 </section>
 <nav class="pagination" aria-label="Paginación">{% if page > 1 %}<a href="?page={{ page-1 }}&q={{ filters.q|urlencode }}&status={{ filters.status }}{% if filters.municipality_id %}&municipality_id={{ filters.municipality_id }}{% endif %}">Anterior</a>{% endif %}<span>Página {{ page }} de {{ pages }}</span>{% if page < pages %}<a href="?page={{ page+1 }}&q={{ filters.q|urlencode }}&status={{ filters.status }}{% if filters.municipality_id %}&municipality_id={{ filters.municipality_id }}{% endif %}">Siguiente</a>{% endif %}</nav>
 {% endblock %}
