@@ -14,11 +14,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
-from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy import case, delete, func, inspect, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from . import __version__
+from .catalog import raster_files, synchronize_municipalities
 from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
 from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
@@ -109,6 +110,7 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             or not window.relative_dir
             or window.min_zoom is None
             or window.max_zoom is None
+            or window.radius_m != settings.window_radius_m
         ):
             continue
         try:
@@ -336,6 +338,33 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.state.settings = settings
     app.state.engine = engine
     app.state.Session = build_session_factory(engine)
+    if inspect(engine).has_table("municipalities"):
+        with app.state.Session() as db:
+            files = raster_files(settings.orthophoto_root)
+            synchronize_municipalities(db, settings.orthophoto_root)
+            if files and not db.scalar(select(func.count()).select_from(OrthophotoSource)):
+                _job(db, "SCAN_CATALOG", {})
+            outdated = list(
+                db.scalars(
+                    select(Person)
+                    .join(TileWindow, TileWindow.person_id == Person.id)
+                    .where(
+                        Person.active.is_(True),
+                        Person.reference_lon.is_not(None),
+                        Person.reference_lat.is_not(None),
+                        TileWindow.radius_m != settings.window_radius_m,
+                    )
+                ).all()
+            )
+            for person in outdated:
+                window = db.get(TileWindow, person.id)
+                if window:
+                    window.status = "PENDIENTE"
+                    window.error = f"Pendiente de regeneración con radio de {settings.window_radius_m} m"
+                person.orthophoto_status = "PENDIENTE"
+                person.orthophoto_error = window.error if window else None
+            _queue_tile_jobs(db, outdated)
+            db.commit()
     app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "app" / "static")), name="static")
 
     @app.middleware("http")
@@ -831,6 +860,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     def orthophotos_scan(request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
         verify_csrf(request, csrf_token, session)
+        synchronize_municipalities(db, settings.orthophoto_root)
         _job(db, "SCAN_CATALOG", {})
         _audit(db, request, "CATALOGO_SOLICITADO", session.admin.username)
         db.commit()
@@ -911,7 +941,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if person.reference_lon is None or person.reference_lat is None:
             return render(request, "public_invalid.html", {"message": "Este registro todavía no tiene una coordenada válida."}, 409)
         window = db.get(TileWindow, person.id)
-        if not window or window.status != "LISTO" or not window.relative_dir:
+        if not window or window.status != "LISTO" or not window.relative_dir or window.radius_m != settings.window_radius_m:
             return render(request, "public_preparing.html", {"person": person}, 409)
         try:
             verify_generated_tiles(
@@ -969,7 +999,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if not link or not link.person.active:
             raise HTTPException(404)
         window = db.get(TileWindow, link.person_id)
-        if not window or window.status != "LISTO" or not window.relative_dir:
+        if not window or window.status != "LISTO" or not window.relative_dir or window.radius_m != settings.window_radius_m:
             raise HTTPException(404)
         if window.min_zoom is None or window.max_zoom is None or not window.min_zoom <= z <= window.max_zoom:
             raise HTTPException(404)

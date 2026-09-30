@@ -13,10 +13,11 @@ from datetime import timedelta
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from .catalog import find_municipality, raster_files, synchronize_municipalities
 from .config import Settings
 from .db import build_engine, build_session_factory
 from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_command, qgis_environment, qgis_tool, verify_generated_tiles
-from .models import Job, Municipality, OrthophotoSource, Person, TileWindow, utcnow
+from .models import Job, OrthophotoSource, Person, TileWindow, utcnow
 
 
 def claim_job(db: Session, worker_id: str) -> Job | None:
@@ -48,7 +49,9 @@ def _crs_label(metadata: dict) -> str | None:
 
 
 def scan_catalog(db: Session, settings: Settings, job: Job) -> None:
-    files = sorted(path for path in settings.orthophoto_root.rglob("*") if path.is_file() and path.suffix.lower() in {".ecw", ".tif", ".tiff"})
+    synchronize_municipalities(db, settings.orthophoto_root)
+    db.flush()
+    files = raster_files(settings.orthophoto_root)
     for index, path in enumerate(files, start=1):
         relative = path.relative_to(settings.orthophoto_root).as_posix()
         source = db.scalar(select(OrthophotoSource).where(OrthophotoSource.relative_path == relative))
@@ -56,7 +59,7 @@ def scan_catalog(db: Session, settings: Settings, job: Job) -> None:
             source = OrthophotoSource(relative_path=relative, inferred_name=path.relative_to(settings.orthophoto_root).parts[0])
             db.add(source)
         if source.municipality_id is None and source.inferred_name:
-            municipality = db.scalar(select(Municipality).where(Municipality.name == source.inferred_name))
+            municipality = find_municipality(db, source.inferred_name)
             if municipality:
                 source.municipality_id = municipality.id
         try:
@@ -163,6 +166,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     window.relative_dir = relative_dir
     window.min_zoom = settings.tile_min_zoom
     window.max_zoom = settings.tile_max_zoom
+    window.radius_m = settings.window_radius_m
     window.status = "LISTO"
     window.error = None
     person.orthophoto_status = "LISTO"

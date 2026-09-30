@@ -4,6 +4,7 @@ $repo = $PSScriptRoot
 Set-Location -LiteralPath $repo
 . (Join-Path $repo 'scripts\Cargar-Entorno.ps1') -Path $EnvFile
 if ($env:PREDIOS_ENV -ne 'production') { throw 'La configuración no corresponde a producción.' }
+if ($env:PREDIOS_WINDOW_RADIUS_M -ne '600') { throw 'Ajuste PREDIOS_WINDOW_RADIUS_M=600 en production.env antes de actualizar.' }
 if (git status --porcelain) { throw 'El checkout de producción tiene cambios locales. Deténgase y revíselos.' }
 $origin = (git remote get-url origin).Trim()
 if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG(\.git)?$') { throw "El origen Git no es el repositorio esperado: $origin" }

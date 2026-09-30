@@ -153,6 +153,7 @@ class TileWindow(Base):
     relative_dir: Mapped[str | None] = mapped_column(String(300))
     min_zoom: Mapped[int | None] = mapped_column(Integer)
     max_zoom: Mapped[int | None] = mapped_column(Integer)
+    radius_m: Mapped[int] = mapped_column(Integer, default=350, server_default="350", nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="PENDIENTE", nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
@@ -170,4 +171,3 @@ class AuditLog(Base):
     details_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     ip_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-

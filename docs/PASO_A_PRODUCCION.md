@@ -9,8 +9,8 @@ Desde el repositorio:
 ```powershell
 .\PREPARAR_VERSION.ps1
 git status
-git tag -a v0.3.1 -m "Predios Remotos v0.3.1"
-git push origin v0.3.1
+git tag -a v0.3.2 -m "Predios Remotos v0.3.2"
+git push origin v0.3.2
 ```
 
 Use una etiqueta nueva en cada entrega (`v0.1.1`, `v0.2.0`, etc.). Producción se actualiza únicamente a etiquetas revisadas, no a cambios sueltos de una rama.
@@ -43,7 +43,7 @@ Abra PowerShell **como administrador**, ubique una copia de `INSTALAR_PROD.ps1` 
   -InstallDir 'C:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.3.1'
+  -Version 'v0.3.2'
 ```
 
 El instalador solicita el dominio HTTPS público y la contraseña inicial del administrador. También crea `production.env`, instala las dependencias fijadas, aplica Alembic y registra `PrediosRemotos-Web` y `PrediosRemotos-Worker`.
@@ -88,8 +88,10 @@ Primero publique una etiqueta nueva desde desarrollo. En el PC de producción, a
 
 ```powershell
 Set-Location C:\PrediosRemotos\app
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.2
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.3
 ```
+
+Si la instalación proviene de una versión anterior a `v0.3.2`, confirme antes del arranque que `production.env` contenga `PREDIOS_WINDOW_RADIUS_M=600`. Las ventanas creadas con otro radio se marcarán pendientes y el trabajador las regenerará; los archivos ráster originales permanecen en solo lectura.
 
 El actualizador exige un checkout limpio, crea y verifica un respaldo completo, detiene web y trabajador, instala la etiqueta, aplica migraciones, reinicia y valida `/health` y `/ready`. Si falla, restaura juntos el commit y el respaldo.
 

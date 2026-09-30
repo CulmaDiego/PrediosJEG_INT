@@ -56,7 +56,7 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
   -InstallDir 'C:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.3.1'
+  -Version 'v0.3.2'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -73,7 +73,7 @@ Después instale `cloudflared`, cree un túnel hacia `http://127.0.0.1:8000` y g
 En el PC de empresa, dentro de `C:\PrediosRemotos\app`:
 
 ```powershell
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.1
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.2
 ```
 
 El script exige un checkout limpio y una etiqueta existente; crea y verifica un respaldo consistente, detiene servicios, instala esa versión, migra la base, reinicia y comprueba `/health` y `/ready`. Si algo falla, detiene procesos y restaura el commit y el respaldo completo.
@@ -82,7 +82,7 @@ Una migración irreversible no se “deshace” con una promesa automática. La 
 
 ## Ortofotos, teselas y modo sin CDN
 
-El catálogo usa `gdalinfo` sin cargar rásteres completos. Las ventanas de 350 m se reproyectan a Web Mercator y solo se generan teselas XYZ de los niveles configurados, fuera de `Imagenes/`. Cada petición de tesela vuelve a validar el enlace de esa persona.
+El catálogo usa `gdalinfo` sin cargar rásteres completos. En una instalación limpia, los municipios se detectan desde las carpetas de ortofotos y el catálogo inicial se programa automáticamente. Las ventanas de 600 m de radio se reproyectan a Web Mercator y solo se generan teselas XYZ de los niveles configurados, fuera de `Imagenes/`. Cada petición de tesela vuelve a validar el enlace de esa persona. Si cambia el radio configurado, las ventanas antiguas dejan de considerarse listas y se regeneran automáticamente.
 
 Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces excluye automáticamente cualquier persona cuya imagen no esté físicamente verificada en todos los niveles configurados.
 

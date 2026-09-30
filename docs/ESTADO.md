@@ -40,8 +40,9 @@ Fecha de actualización: 2026-09-30.
 ## Etapa 4 — Ortofotos, trabajos y reportes
 
 - [x] Inventario GDAL en lectura y errores por fuente sin detener el catálogo.
+- [x] Instalación limpia capaz de descubrir municipios desde las carpetas, programar el catálogo inicial y reasignar nombres equivalentes con o sin tilde.
 - [x] Cola SQLite reanudable, reclamo atómico, progreso y errores visibles.
-- [x] Ventana configurable de 350 m y teselas XYZ limitadas a esa ventana.
+- [x] Ventana configurable de 600 m de radio y teselas XYZ limitadas a esa ventana; un cambio de radio invalida y vuelve a programar las ventanas antiguas.
 - [x] Generación y regeneración manual por persona, selección o municipio, con verificación física de la tesela central en cada nivel.
 - [x] Descarga de enlaces limitada a personas con imágenes verificadas; los enlaces pendientes muestran una pantalla de preparación en lugar de un mapa vacío.
 - [x] Autorización de cada tesela contra persona/enlace.

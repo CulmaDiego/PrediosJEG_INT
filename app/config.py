@@ -62,7 +62,7 @@ class Settings:
             public_base_url=os.getenv("PREDIOS_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
             cookie_secure=_env_bool("PREDIOS_COOKIE_SECURE", environment == "production"),
             qgis_root=Path(os.getenv("PREDIOS_QGIS_ROOT", r"C:\Program Files\QGIS 3.44.3")),
-            window_radius_m=int(os.getenv("PREDIOS_WINDOW_RADIUS_M", "350")),
+            window_radius_m=int(os.getenv("PREDIOS_WINDOW_RADIUS_M", "600")),
             tile_min_zoom=int(os.getenv("PREDIOS_TILE_MIN_ZOOM", "15")),
             tile_max_zoom=int(os.getenv("PREDIOS_TILE_MAX_ZOOM", "19")),
             asset_mode=os.getenv("PREDIOS_ASSET_MODE", "cdn").strip().lower(),
