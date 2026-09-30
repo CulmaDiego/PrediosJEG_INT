@@ -6,15 +6,15 @@
   <meta name="description" content="Predios Remotos · Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración">
   <title>{% block title %}Predios Remotos{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/app.css?v=11">
+  <link rel="stylesheet" href="/static/app.css?v=12">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}admin-shell{% endblock %}">
   {% block body %}
   <aside class="sidebar">
     <a class="brand company-brand" href="/admin" aria-label="Jorge Eliecer Gaitán, Predios Remotos, inicio">
-      <span class="brand-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración"></span>
-      <span class="brand-product">Predios <strong>Remotos</strong></span>
+      <span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span>
+      <span class="brand-copy"><strong>Jorge Eliecer Gaitán</strong><small>Predios Remotos</small></span>
     </a>
     <nav aria-label="Navegación principal">
       <a href="/admin" {% if request.url.path == '/admin' %}class="active" aria-current="page"{% endif %}>Resumen</a>
@@ -30,7 +30,7 @@
   </aside>
   <main class="admin-main">
     <header class="mobile-topbar">
-      <a class="brand compact" href="/admin"><span class="brand-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán"></span><strong>Predios Remotos</strong></a>
+      <a class="brand compact" href="/admin"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span><span class="brand-copy"><strong>Jorge E. Gaitán</strong><small>Predios Remotos</small></span></a>
       <details>
         <summary aria-label="Abrir menú">Menú</summary>
         <nav>

@@ -26,7 +26,7 @@ Fecha de actualización: 2026-09-30.
 
 - [x] Token aleatorio de 256 bits almacenado solo como hash, expiración y revocación.
 - [x] Mapa móvil vertical/horizontal, dibujo por puntos y a mano alzada, edición, borrado, deshacer y confirmación.
-- [x] Sobrezoom hasta nivel 24 reutilizando la última tesela nativa, con desplazamiento confinado al recorte de ortofoto para evitar áreas vacías.
+- [x] Alejamiento hasta encuadrar completo el radio permitido y sobrezoom hasta nivel 24 reutilizando la última tesela nativa, con desplazamiento confinado al recorte de ortofoto.
 - [x] Ortofoto sin capa translúcida y pantalla final de “Respuesta recibida” después de cada envío.
 - [x] Ortofoto realzada sin velos de relleno; el dibujo a mano muestra el trazo en vivo, se cierra al regresar al inicio y simplifica automáticamente los vértices para facilitar la edición.
 - [x] Identidad visual actualizada con la paleta institucional `#096e74`, `#44bec6`, `#bcd3d8`, `#7e9cac`, `#162f3e`, `#35596b`, `#949cac`, `#96a4ac`, `#61808e` y `#4c6674`.
@@ -35,7 +35,7 @@ Fecha de actualización: 2026-09-30.
 - [x] Validación Polygon WGS84, 3–100 vértices, cierre, autointersección, área y distancia máxima.
 - [x] Versiones inmutables y una sola vigente.
 - [ ] Revisión táctil manual en teléfono físico. No se afirma completada porque no hubo un dispositivo físico disponible en esta sesión.
-- Verificación: Playwright + Chrome a 320, 375 y 430 px; carga de tesela privada, sobrezoom hasta nivel 24 sin perder la imagen, desplazamiento limitado, dibujo a mano alzada, edición, confirmación, fallo de red y reintento. También se comprobó horizontal a 667 × 375 px.
+- Verificación: Playwright + Chrome a 320, 375 y 430 px; carga de tesela privada, encuadre completo del radio permitido, sobrezoom hasta nivel 24 sin perder la imagen, desplazamiento limitado, dibujo a mano alzada, edición, confirmación, fallo de red y reintento. También se comprobó horizontal a 667 × 375 px.
 
 ## Etapa 4 — Ortofotos, trabajos y reportes
 

@@ -93,8 +93,8 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                 page.on("response", lambda response: tile_ok.append(response.status) if "/tiles/" in response.url else None)
                 page.goto(f"http://127.0.0.1:{port}/p/{token}", wait_until="networkidle")
                 page.wait_for_selector(".leaflet-map-pane", state="attached")
-                expect(page.locator(".public-logo-frame img")).to_be_visible()
-                assert page.locator(".public-logo-frame img").evaluate("image => image.complete && image.naturalWidth > 0")
+                expect(page.locator(".public-header .brand-symbol img")).to_be_visible()
+                assert page.locator(".public-header .brand-symbol img").evaluate("image => image.complete && image.naturalWidth > 0")
                 assert page.locator("#map").bounding_box()["height"] > 200
                 assert page.locator("body").evaluate("el => el.scrollWidth <= el.clientWidth")
                 assert page.locator("#confirmButton").is_visible()
@@ -112,10 +112,31 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.reload(wait_until="networkidle")
                     migrated = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
                     assert 4 <= len(migrated["coordinates"][0]) <= 13
+                    minimum_zoom = float(page.locator("#map").get_attribute("data-min-display-zoom"))
+                    zoom_out = page.locator(".leaflet-control-zoom-out")
+                    while float(page.locator("#map").get_attribute("data-zoom")) > minimum_zoom:
+                        previous_zoom = float(page.locator("#map").get_attribute("data-zoom"))
+                        zoom_out.click()
+                        page.wait_for_function(
+                            "previous => Number(document.getElementById('map').dataset.zoom) < previous",
+                            arg=previous_zoom,
+                        )
+                    expect(page.locator("#map")).to_have_attribute("data-zoom", str(int(minimum_zoom)))
+                    map_box = page.locator("#map").bounding_box()
+                    radius_box = page.locator('.leaflet-overlay-pane path[stroke-dasharray]').bounding_box()
+                    assert map_box and radius_box
+                    assert radius_box["x"] >= map_box["x"]
+                    assert radius_box["y"] >= map_box["y"]
+                    assert radius_box["x"] + radius_box["width"] <= map_box["x"] + map_box["width"]
+                    assert radius_box["y"] + radius_box["height"] <= map_box["y"] + map_box["height"]
                     zoom_in = page.locator(".leaflet-control-zoom-in")
-                    for expected_zoom in range(19, 25):
+                    while float(page.locator("#map").get_attribute("data-zoom")) < 24:
+                        previous_zoom = float(page.locator("#map").get_attribute("data-zoom"))
                         zoom_in.click()
-                        expect(page.locator("#map")).to_have_attribute("data-zoom", str(expected_zoom))
+                        page.wait_for_function(
+                            "previous => Number(document.getElementById('map').dataset.zoom) > previous",
+                            arg=previous_zoom,
+                        )
                     expect(page.locator("#map")).to_have_attribute("data-zoom", "24")
                     assert page.locator(".leaflet-tile-loaded").count() > 0
                     map_box = page.locator("#map").bounding_box()
@@ -156,7 +177,7 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.locator("#sendButton").click()
                     expect(page.get_by_role("heading", name="Respuesta recibida")).to_be_visible()
                     expect(page.get_by_text("Ya puede cerrar esta pestaña o ventana.")).to_be_visible()
-                    expect(page.locator(".message-logo-frame img")).to_be_visible()
+                    expect(page.locator(".message-brand .brand-symbol img")).to_be_visible()
                 page.close()
 
             landscape = browser.new_page(viewport={"width": 667, "height": 375})

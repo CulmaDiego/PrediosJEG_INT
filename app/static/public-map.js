@@ -15,6 +15,13 @@
     [lat - latDelta, lon - lonDelta],
     [lat + latDelta, lon + lonDelta],
   );
+  const allowedRadius = Math.min(300, radius);
+  const allowedLatDelta = allowedRadius / 111320;
+  const allowedLonDelta = allowedRadius / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.2));
+  const allowedBounds = L.latLngBounds(
+    [lat - allowedLatDelta, lon - allowedLonDelta],
+    [lat + allowedLatDelta, lon + allowedLonDelta],
+  );
   const draftKey = `predios-remotos-draft-${token.slice(0, 12)}`;
   const map = L.map(mapNode, {
     zoomControl: true,
@@ -24,10 +31,11 @@
     maxBoundsViscosity: 1,
     zoomSnap: 0.25,
   });
-  const containmentMinZoom = map.getBoundsZoom(imageBounds, true);
-  map.setMinZoom(Math.max(nativeMinZoom, containmentMinZoom));
+  const overviewMinZoom = Math.floor(map.getBoundsZoom(allowedBounds, false));
+  map.setMinZoom(Math.max(nativeMinZoom, overviewMinZoom));
   map.setMaxZoom(displayMaxZoom);
   map.setView([lat, lon], Math.max(18, map.getMinZoom()));
+  mapNode.dataset.minDisplayZoom = String(map.getMinZoom());
   if (mapNode.dataset.window === 'LISTO') {
     L.tileLayer(`/p/${encodeURIComponent(token)}/tiles/{z}/{x}/{y}.png`, {
       minZoom: nativeMinZoom,
@@ -39,7 +47,7 @@
     }).addTo(map);
   }
   L.circleMarker([lat, lon], { radius: 8, weight: 3, color: '#162f3e', fillColor: '#44bec6', fillOpacity: 1 }).addTo(map).bindTooltip('Punto de referencia');
-  L.circle([lat, lon], { radius: 300, color: '#096e74', weight: 1, fill: false, dashArray: '6 6', interactive: false }).addTo(map);
+  L.circle([lat, lon], { radius: allowedRadius, color: '#096e74', weight: 1, fill: false, dashArray: '6 6', interactive: false }).addTo(map);
   const syncMapState = () => {
     const center = map.getCenter();
     mapNode.dataset.zoom = String(map.getZoom());

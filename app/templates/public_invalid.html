@@ -1,4 +1,4 @@
 {% extends "base.html" %}
 {% block title %}Enlace no disponible · Predios Remotos{% endblock %}
 {% block body_class %}public-message-page{% endblock %}
-{% block body %}<main class="public-message message-card"><span class="message-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración"></span><span class="message-icon" aria-hidden="true">!</span><h1>Este enlace no está disponible</h1><p>{{ message or 'Puede estar vencido o haber sido reemplazado. Solicite un enlace nuevo a la entidad.' }}</p></main>{% endblock %}
+{% block body %}<main class="public-message message-card"><div class="message-brand"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span><span class="brand-copy"><strong>Jorge Eliecer Gaitán</strong><small>Ingeniería · Consultoría · Valoración</small></span></div><span class="message-icon" aria-hidden="true">!</span><h1>Este enlace no está disponible</h1><p>{{ message or 'Puede estar vencido o haber sido reemplazado. Solicite un enlace nuevo a la entidad.' }}</p></main>{% endblock %}

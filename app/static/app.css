@@ -36,3 +36,28 @@ input,select,.stack-form textarea{border-color:rgba(97,128,142,.65);box-shadow:i
 @media(max-width:760px){.admin-main{padding-top:0}.mobile-topbar{min-height:4.4rem;background:linear-gradient(110deg,#162f3e,#123f4b);box-shadow:0 7px 22px rgba(22,47,62,.18)}.brand.compact{gap:.55rem}.brand.compact .brand-logo-frame{width:5.2rem;height:3.2rem;padding:.1rem .2rem;border-radius:.55rem}.brand.compact strong{font-size:.78rem;letter-spacing:.02em}.mobile-topbar details[open] nav{border:1px solid var(--line)}.panel:hover,.metric:hover{transform:none}.page-head{padding-top:.4rem}}
 @media(max-width:430px){.public-header{min-height:4.6rem;padding:.45rem .55rem}.public-branding{gap:.5rem}.public-logo-frame{flex-basis:5.7rem;width:5.7rem;height:3.25rem}.public-header h1{max-width:43vw;font-size:.9rem}.public-step{font-size:.62rem;letter-spacing:.08em}.icon-button{width:2.45rem;height:2.45rem}.map-status{top:5rem}.message-logo-frame{height:7.2rem}}
 @media(orientation:landscape) and (max-height:520px){.public-header{min-height:3.8rem}.public-logo-frame{height:2.9rem;width:5.8rem;flex-basis:5.8rem}.map-status{top:4.15rem}}
+
+/* Correccion del logo: isotipo sin deformar y nombre legible */
+.company-brand{display:flex;align-items:center;gap:.8rem}
+.brand-symbol{position:relative;display:block;flex:0 0 auto;width:3.9rem;height:3.9rem;overflow:hidden;border-radius:50%;background:#fff;border:1px solid rgba(188,211,216,.72);box-shadow:0 8px 22px rgba(0,0,0,.18)}
+.brand-symbol img{position:absolute;display:block;width:8rem;max-width:none;height:auto;left:-.2rem;top:-.35rem}
+.brand-copy{display:grid;min-width:0;line-height:1.13}
+.brand-copy strong{color:#fff;font-size:.95rem;letter-spacing:-.01em}
+.brand-copy small{margin-top:.27rem;color:#bcd3d8;font-size:.64rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.login-brand,.message-brand{display:flex;align-items:center;justify-content:center;gap:.9rem}
+.login-brand .brand-copy,.message-brand .brand-copy{text-align:left}
+.login-brand .brand-copy strong,.message-brand .brand-copy strong{color:#162f3e;font-size:1.02rem}
+.login-brand .brand-copy small,.message-brand .brand-copy small{color:#4c6674;font-size:.62rem}
+.login-brand .brand-symbol,.message-brand .brand-symbol{width:4.6rem;height:4.6rem}
+.login-brand .brand-symbol img,.message-brand .brand-symbol img{width:9.4rem;left:-.24rem;top:-.4rem}
+.message-brand{margin:0 auto 1.5rem;padding-bottom:1.2rem;border-bottom:1px solid var(--line)}
+.public-header{min-height:4.4rem}
+.public-header .brand-symbol{width:3.15rem;height:3.15rem}
+.public-header .brand-symbol img{width:6.48rem;left:-.18rem;top:-.29rem}
+.map-status{top:4.85rem}
+.mobile-topbar .brand-symbol{width:2.9rem;height:2.9rem}
+.mobile-topbar .brand-symbol img{width:5.95rem;left:-.17rem;top:-.27rem}
+.mobile-topbar .brand-copy strong{font-size:.78rem}
+.mobile-topbar .brand-copy small{font-size:.56rem}
+@media(max-width:430px){.public-header{min-height:4.2rem}.public-header .brand-symbol{width:2.8rem;height:2.8rem}.public-header .brand-symbol img{width:5.76rem;left:-.16rem;top:-.26rem}.public-header h1{max-width:52vw}.map-status{top:4.6rem}.login-brand,.message-brand{gap:.7rem}.login-brand .brand-symbol,.message-brand .brand-symbol{width:4rem;height:4rem}.login-brand .brand-symbol img,.message-brand .brand-symbol img{width:8.2rem;left:-.22rem;top:-.36rem}.login-brand .brand-copy strong,.message-brand .brand-copy strong{font-size:.9rem}.login-brand .brand-copy small,.message-brand .brand-copy small{font-size:.54rem;letter-spacing:.07em}}
+@media(orientation:landscape) and (max-height:520px){.public-header{min-height:3.7rem}.public-header .brand-symbol{width:2.7rem;height:2.7rem}.public-header .brand-symbol img{width:5.55rem;left:-.15rem;top:-.25rem}.map-status{top:4.05rem}}

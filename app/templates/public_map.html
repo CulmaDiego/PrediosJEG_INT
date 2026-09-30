@@ -10,7 +10,7 @@
 {% endblock %}
 {% block body %}
 <main class="public-map-shell">
-  <header class="public-header"><div class="public-branding"><span class="public-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán"></span><div class="public-person"><span class="public-step">Ubique el contorno</span><h1>{{ person.name }}</h1></div></div><button id="helpButton" class="icon-button" type="button" aria-label="Ver instrucciones">?</button></header>
+  <header class="public-header"><div class="public-branding"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán"></span><div class="public-person"><span class="public-step">Ubique el contorno</span><h1>{{ person.name }}</h1></div></div><button id="helpButton" class="icon-button" type="button" aria-label="Ver instrucciones">?</button></header>
   <div id="map" data-token="{{ token }}" data-lat="{{ person.reference_lat }}" data-lon="{{ person.reference_lon }}" data-csrf="{{ public_csrf }}" data-window="{{ window.status if window else 'PENDIENTE' }}" data-radius="{{ settings.window_radius_m }}" data-min-zoom="{{ window.min_zoom if window and window.min_zoom is not none else settings.tile_min_zoom }}" data-max-native-zoom="{{ window.max_zoom if window and window.max_zoom is not none else settings.tile_max_zoom }}" data-current='{{ current_geometry|safe }}' aria-label="Mapa para dibujar el predio"></div>
   <div id="mapStatus" class="map-status" role="status">{% if window and window.status == 'LISTO' %}Ortofoto lista{% elif person.orthophoto_status == 'SIN_ORTOFOTO' %}Sin ortofoto: {{ person.orthophoto_error }}{% else %}La ortofoto se está preparando{% endif %}</div>
   <div class="tool-dock" aria-label="Herramientas de dibujo">
@@ -26,5 +26,5 @@
 <dialog id="confirmDialog"><div class="dialog-card"><p class="eyebrow">Confirmación</p><h2>¿El contorno está correcto?</h2><p>Podrá volver a abrir este enlace y enviar una versión nueva si necesita corregirlo.</p><div class="button-row"><button class="button secondary" data-close-dialog type="button">Seguir editando</button><button id="sendButton" class="button primary" type="button">Sí, enviar</button></div></div></dialog>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 {% if settings.asset_mode == 'local' %}<script src="/static/vendor/leaflet/leaflet.js"></script><script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>{% else %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.min.js"></script>{% endif %}
-<script src="/static/public-map.js?v=8"></script>
+<script src="/static/public-map.js?v=9"></script>
 {% endblock %}
