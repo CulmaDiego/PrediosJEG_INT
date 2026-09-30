@@ -5,7 +5,9 @@ import hmac
 import secrets
 import threading
 import time
+from base64 import urlsafe_b64encode
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import timedelta
 
 from argon2 import PasswordHasher
@@ -15,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import Settings
-from .models import Admin, AdminSession, PublicLink, utcnow
+from .models import Admin, AdminSession, Person, PublicLink, utcnow
 
 
 SESSION_COOKIE = "predios_session"
@@ -88,13 +90,39 @@ def verify_public_csrf(token: str, submitted: str, settings: Settings) -> None:
         raise HTTPException(status_code=403, detail="Solicitud no válida")
 
 
-def find_public_link(db: Session, raw_token: str) -> PublicLink | None:
+@dataclass(slots=True)
+class ResolvedPublicLink:
+    person_id: int
+    person: Person
+
+
+def stable_public_token(person_id: int, settings: Settings) -> str:
+    payload = f"predios-persona:{person_id}"
+    signature = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).digest()
+    encoded = urlsafe_b64encode(signature).decode().rstrip("=")
+    return f"v1.{person_id}.{encoded}"
+
+
+def _stable_person_id(raw_token: str, settings: Settings) -> int | None:
+    parts = raw_token.split(".")
+    if len(parts) != 3 or parts[0] != "v1" or not parts[1].isdigit():
+        return None
+    person_id = int(parts[1])
+    expected = stable_public_token(person_id, settings)
+    return person_id if hmac.compare_digest(raw_token, expected) else None
+
+
+def find_public_link(db: Session, raw_token: str, settings: Settings | None = None) -> ResolvedPublicLink | None:
     link = db.scalar(select(PublicLink).where(PublicLink.token_hash == sha256(raw_token)))
-    if not link or link.revoked_at is not None:
+    if link:
+        if link.revoked_at is not None or (link.expires_at and link.expires_at <= utcnow()):
+            return None
+        return ResolvedPublicLink(person_id=link.person_id, person=link.person)
+    if settings is None:
         return None
-    if link.expires_at and link.expires_at <= utcnow():
-        return None
-    return link
+    person_id = _stable_person_id(raw_token, settings)
+    person = db.get(Person, person_id) if person_id is not None else None
+    return ResolvedPublicLink(person_id=person.id, person=person) if person else None
 
 
 def ip_fingerprint(request: Request, settings: Settings) -> str:
@@ -119,4 +147,3 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
-

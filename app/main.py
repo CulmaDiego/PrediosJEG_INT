@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import io
 import json
-import secrets
 import shutil
 import subprocess
 import uuid
 from collections.abc import Iterator
-from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -16,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from openpyxl import Workbook
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -33,7 +31,6 @@ from .models import (
     Municipality,
     OrthophotoSource,
     Person,
-    PublicLink,
     TileWindow,
     utcnow,
 )
@@ -47,7 +44,7 @@ from .security import (
     public_csrf,
     rate_limiter,
     require_admin,
-    sha256,
+    stable_public_token,
     verify_csrf,
     verify_password,
     verify_public_csrf,
@@ -97,6 +94,23 @@ def _audit(db: Session, request: Request, action: str, actor: str, person_id: in
 
 def _safe_next(value: str | None) -> str:
     return value if value and value.startswith("/admin") and "//" not in value else "/admin"
+
+
+def _public_url(person_id: int, settings: Settings) -> str:
+    return f"{settings.public_base_url}/p/{stable_public_token(person_id, settings)}"
+
+
+def _links_workbook(people: list[Person], settings: Settings) -> io.BytesIO:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Enlaces"
+    sheet.append(["NOMBRE", "CELULAR", "MUNICIPIO", "ENLACE"])
+    for person in people:
+        sheet.append([person.name, person.phone, person.municipality.name, _public_url(person.id, settings)])
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
 
 
 def create_app(settings: Settings | None = None, create_schema: bool = False) -> FastAPI:
@@ -296,22 +310,35 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         events = db.scalars(select(AuditLog).where(AuditLog.person_id == person_id).order_by(AuditLog.created_at.desc()).limit(100)).all()
         drawings = db.scalars(select(DrawingVersion).where(DrawingVersion.person_id == person_id).order_by(DrawingVersion.version.desc())).all()
         window = db.get(TileWindow, person_id)
-        return render(request, "person_detail.html", {"admin": session.admin, "person": person, "events": events, "drawings": drawings, "window": window})
+        return render(request, "person_detail.html", {"admin": session.admin, "person": person, "events": events, "drawings": drawings, "window": window, "public_url": _public_url(person.id, settings)})
 
-    @app.post("/admin/personas/{person_id}/enlace")
-    def person_link(person_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
+    @app.post("/admin/personas/{person_id}/reiniciar")
+    def person_reset(person_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
         verify_csrf(request, csrf_token, session)
         person = db.get(Person, person_id)
         if not person:
             raise HTTPException(404)
-        db.execute(update(PublicLink).where(PublicLink.person_id == person_id, PublicLink.revoked_at.is_(None)).values(revoked_at=utcnow()))
-        token = secrets.token_urlsafe(32)
-        db.add(PublicLink(person_id=person_id, token_hash=sha256(token), expires_at=utcnow() + timedelta(days=90)))
-        _audit(db, request, "ENLACE_REGENERADO", session.admin.username, person_id)
+        deleted_versions = db.scalar(select(func.count()).select_from(DrawingVersion).where(DrawingVersion.person_id == person_id)) or 0
+        db.execute(delete(DrawingVersion).where(DrawingVersion.person_id == person_id))
+        person.status = "PENDIENTE"
+        person.last_opened_at = None
+        person.responded_at = None
+        person.drawing_version = 0
+        _audit(db, request, "RESPUESTA_REINICIADA", session.admin.username, person_id, {"versiones_eliminadas": deleted_versions})
         db.commit()
-        body = f"NOMBRE,CELULAR,ENLACE\r\n\"{person.name.replace(chr(34), chr(34)*2)}\",{person.phone},{settings.public_base_url}/p/{token}\r\n"
-        return Response(body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="enlace_persona_{person.id}.csv"'})
+        return RedirectResponse(f"/admin/personas/{person_id}?reiniciado=1", status_code=303)
+
+    @app.get("/admin/enlaces")
+    def links_download(request: Request, municipality_id: int | None = None, db: Session = Depends(get_db)) -> Response:
+        require_admin(request, db)
+        query = select(Person).where(Person.active.is_(True)).order_by(Person.name)
+        if municipality_id:
+            query = query.where(Person.municipality_id == municipality_id)
+        people = list(db.scalars(query).all())
+        output = _links_workbook(people, settings)
+        suffix = f"_municipio_{municipality_id}" if municipality_id else "_todos"
+        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="enlaces{suffix}.xlsx"'})
 
     @app.post("/admin/municipios/{municipality_id}/enlaces")
     def municipality_links(municipality_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
@@ -321,20 +348,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if not municipality:
             raise HTTPException(404)
         people = db.scalars(select(Person).where(Person.municipality_id == municipality_id, Person.active.is_(True)).order_by(Person.name)).all()
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Enlaces"
-        sheet.append(["NOMBRE", "CELULAR", "ENLACE"])
-        for person in people:
-            db.execute(update(PublicLink).where(PublicLink.person_id == person.id, PublicLink.revoked_at.is_(None)).values(revoked_at=utcnow()))
-            token = secrets.token_urlsafe(32)
-            db.add(PublicLink(person_id=person.id, token_hash=sha256(token), expires_at=utcnow() + timedelta(days=90)))
-            sheet.append([person.name, person.phone, f"{settings.public_base_url}/p/{token}"])
-        _audit(db, request, "ENLACES_MUNICIPIO_REGENERADOS", session.admin.username, details={"municipality_id": municipality_id, "count": len(people)})
-        db.commit()
-        output = io.BytesIO()
-        workbook.save(output)
-        output.seek(0)
+        output = _links_workbook(people, settings)
         filename = quote(f"enlaces_{municipality.name}.xlsx")
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
 
@@ -501,7 +515,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.get("/p/{token}", response_class=HTMLResponse)
     def public_map(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
         rate_limiter.check(f"open:{ip_fingerprint(request, settings)}", 120, 60)
-        link = find_public_link(db, token)
+        link = find_public_link(db, token, settings)
         if not link or not link.person.active:
             return render(request, "public_invalid.html", status_code=404)
         person = link.person
@@ -519,7 +533,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.post("/p/{token}/submit")
     async def public_submit(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
         rate_limiter.check(f"submit:{ip_fingerprint(request, settings)}", 20, 300)
-        link = find_public_link(db, token)
+        link = find_public_link(db, token, settings)
         if not link or not link.person.active:
             raise HTTPException(404, "Enlace inválido, vencido o revocado")
         body = await request.json()
@@ -539,11 +553,18 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         person.status = "RESPONDIO"
         _audit(db, request, "DIBUJO_ENVIADO", "PUBLICO", person.id, {"version": version, "area_m2": area})
         db.commit()
-        return JSONResponse({"ok": True, "version": version, "area_m2": area, "message": "Su predio quedó guardado correctamente."})
+        return JSONResponse({"ok": True, "version": version, "area_m2": area, "message": "Su predio quedó guardado correctamente.", "redirect_url": f"/p/{token}/recibido"})
+
+    @app.get("/p/{token}/recibido", response_class=HTMLResponse)
+    def public_success(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
+        link = find_public_link(db, token, settings)
+        if not link or not link.person.active:
+            return render(request, "public_invalid.html", status_code=404)
+        return render(request, "public_success.html", {"person": link.person, "version": link.person.drawing_version or None})
 
     @app.get("/p/{token}/tiles/{z}/{x}/{y}.png")
     def private_tile(token: str, z: int, x: int, y: int, request: Request, db: Session = Depends(get_db)) -> Response:
-        link = find_public_link(db, token)
+        link = find_public_link(db, token, settings)
         if not link:
             raise HTTPException(404)
         window = db.get(TileWindow, link.person_id)

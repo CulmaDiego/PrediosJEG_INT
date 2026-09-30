@@ -22,6 +22,8 @@ Además, compruebe periódicamente que la carpeta contenga `manifest.json`, `pre
 5. Reinstale las dependencias de ese commit y reinicie ambos procesos.
 6. Compruebe `/health`, `/ready`, inicio de sesión y un enlace público de prueba.
 
+`PREDIOS_SECRET_KEY` debe conservarse entre reinstalaciones y restauraciones: además de proteger las sesiones, determina los enlaces públicos estables. Cambiarla invalida esos enlaces.
+
 ```powershell
 schtasks /End /TN 'PrediosRemotos-Web'
 schtasks /End /TN 'PrediosRemotos-Worker'
@@ -42,4 +44,3 @@ El origen es exclusivamente `http://127.0.0.1:8000`. Cloudflare entrega HTTPS p�
 ## Carga prevista y SQLite
 
 El alcance es un servidor de oficina, un administrador y una carga pública moderada. La prueba automatizada ejecuta lectores concurrentes mientras escribe eventos y confirma WAL + `busy_timeout`. Antes de ampliar a varios trabajadores web o campañas masivas, mida con la concurrencia real. Si aparecen esperas sostenidas, `database is locked` o latencias fuera del objetivo, conserve evidencia (tasa, percentiles, errores) y planifique una migración posterior a un servidor de base de datos; no agregue otro servidor solo por anticipación.
-

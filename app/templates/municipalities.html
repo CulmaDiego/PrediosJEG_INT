@@ -13,7 +13,7 @@
         <label class="switch"><input type="checkbox" name="active" {% if municipality.active %}checked{% endif %}><span>Activo</span></label>
         <a class="button ghost" href="/admin/personas?municipality_id={{ municipality.id }}">Ver personas</a>
         <button class="button secondary" type="submit">Guardar</button>
-        <button class="button ghost" type="submit" formmethod="post" formaction="/admin/municipios/{{ municipality.id }}/enlaces" data-confirm="Esto revocará todos los enlaces anteriores del municipio y descargará enlaces nuevos. ¿Desea continuar?">Regenerar enlaces</button>
+        <a class="button ghost" href="/admin/enlaces?municipality_id={{ municipality.id }}">Descargar enlaces</a>
       </form>
       {% else %}<p class="empty">Cree el primer municipio.</p>{% endfor %}
     </div>

@@ -39,7 +39,7 @@
     }).addTo(map);
   }
   L.circleMarker([lat, lon], { radius: 8, weight: 3, color: '#162f3e', fillColor: '#44bec6', fillOpacity: 1 }).addTo(map).bindTooltip('Punto de referencia');
-  L.circle([lat, lon], { radius: 300, color: '#096e74', weight: 1, fillOpacity: 0.03, dashArray: '6 6', interactive: false }).addTo(map);
+  L.circle([lat, lon], { radius: 300, color: '#096e74', weight: 1, fill: false, dashArray: '6 6', interactive: false }).addTo(map);
   const syncMapState = () => {
     const center = map.getCenter();
     mapNode.dataset.zoom = String(map.getZoom());
@@ -145,8 +145,8 @@
       const response = await fetch(`/p/${encodeURIComponent(token)}/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ csrf, geometry: activeLayer.toGeoJSON().geometry }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail || 'No fue posible guardar');
-      sessionStorage.removeItem(draftKey); confirmDialog.close(); notify(`${result.message} Área: ${result.area_m2} m²`, 'success');
-      document.getElementById('mapStatus').textContent = `Guardado · versión ${result.version}`;
+      sessionStorage.removeItem(draftKey);
+      window.location.assign(result.redirect_url);
     } catch (error) { confirmDialog.close(); notify(`${error.message}. El dibujo sigue aquí para reintentar.`, 'error'); }
     finally { button.disabled = false; button.textContent = 'Sí, enviar'; }
   });

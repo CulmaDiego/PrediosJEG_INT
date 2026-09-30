@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Personas · Predios Remotos{% endblock %}
 {% block content %}
-<div class="page-head"><div><p class="eyebrow">Seguimiento</p><h1>Personas</h1></div><a class="button primary" href="/admin/importar">Importar archivo</a></div>
+<div class="page-head"><div><p class="eyebrow">Seguimiento</p><h1>Personas</h1></div><div class="button-row"><a class="button secondary" href="/admin/enlaces{% if filters.municipality_id %}?municipality_id={{ filters.municipality_id }}{% endif %}">Descargar enlaces</a><a class="button primary" href="/admin/importar">Importar archivo</a></div></div>
 <form class="filter-bar" method="get">
   <label>Buscar<input name="q" value="{{ filters.q }}" placeholder="Nombre o celular"></label>
   <label>Municipio<select name="municipality_id"><option value="">Todos</option>{% for municipality in municipalities %}<option value="{{ municipality.id }}" {% if filters.municipality_id == municipality.id %}selected{% endif %}>{{ municipality.name }}</option>{% endfor %}</select></label>
@@ -16,4 +16,3 @@
 </section>
 <nav class="pagination" aria-label="Paginación">{% if page > 1 %}<a href="?page={{ page-1 }}&q={{ filters.q|urlencode }}&status={{ filters.status }}{% if filters.municipality_id %}&municipality_id={{ filters.municipality_id }}{% endif %}">Anterior</a>{% endif %}<span>Página {{ page }} de {{ pages }}</span>{% if page < pages %}<a href="?page={{ page+1 }}&q={{ filters.q|urlencode }}&status={{ filters.status }}{% if filters.municipality_id %}&municipality_id={{ filters.municipality_id }}{% endif %}">Siguiente</a>{% endif %}</nav>
 {% endblock %}
-

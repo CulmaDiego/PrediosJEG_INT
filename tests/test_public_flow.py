@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import io
+
+from openpyxl import load_workbook
 from sqlalchemy import select
 
 from app.models import DrawingVersion, Person, PublicLink, TileWindow
-from app.security import public_csrf, sha256
+from app.security import public_csrf, sha256, stable_public_token
+from tests.conftest import login
 
 
 def square(lon: float, lat: float, delta: float = 0.0002) -> dict:
@@ -17,10 +21,61 @@ def test_valid_polygon_creates_immutable_current_version(test_app):
     second = client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294, 0.00015)})
     assert first.status_code == 200
     assert second.status_code == 200
+    assert first.json()["redirect_url"].endswith("/recibido")
+    assert second.json()["redirect_url"].endswith("/recibido")
+    success = client.get(second.json()["redirect_url"])
+    assert success.status_code == 200
+    assert "Respuesta recibida" in success.text
     with app.state.Session() as db:
         drawings = db.scalars(select(DrawingVersion).where(DrawingVersion.person_id == person_id).order_by(DrawingVersion.version)).all()
         assert [item.version for item in drawings] == [1, 2]
         assert [item.is_current for item in drawings] == [False, True]
+
+
+def test_stable_link_reset_clears_versions_without_changing_url(test_app):
+    app, client, _, person_id = test_app
+    token = stable_public_token(person_id, app.state.settings)
+    csrf = public_csrf(token, app.state.settings)
+    assert client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294)}).status_code == 200
+    admin_csrf = login(client)
+    detail_before = client.get(f"/admin/personas/{person_id}")
+    public_url = f"http://testserver/p/{token}"
+    assert public_url in detail_before.text
+    assert "Copiar enlace" in detail_before.text
+    assert "Reiniciar respuesta" in detail_before.text
+    reset = client.post(f"/admin/personas/{person_id}/reiniciar", data={"csrf_token": admin_csrf}, follow_redirects=False)
+    assert reset.status_code == 303
+    detail_after = client.get(f"/admin/personas/{person_id}")
+    assert public_url in detail_after.text
+    with app.state.Session() as db:
+        person = db.get(Person, person_id)
+        drawings = db.scalars(select(DrawingVersion).where(DrawingVersion.person_id == person_id)).all()
+        assert drawings == []
+        assert person.status == "PENDIENTE"
+        assert person.drawing_version == 0
+        assert person.responded_at is None
+
+
+def test_bulk_links_and_exports_use_stable_links_and_latest_version(test_app):
+    app, client, token, person_id = test_app
+    csrf = public_csrf(token, app.state.settings)
+    client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294)})
+    client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294, 0.00015)})
+    login(client)
+
+    links = client.get("/admin/enlaces")
+    assert links.status_code == 200
+    links_sheet = load_workbook(io.BytesIO(links.content), read_only=True).active
+    link_rows = list(links_sheet.iter_rows(values_only=True))
+    assert link_rows[0] == ("NOMBRE", "CELULAR", "MUNICIPIO", "ENLACE")
+    assert link_rows[1][3] == f"http://testserver/p/{stable_public_token(person_id, app.state.settings)}"
+
+    report = client.get("/admin/reportes/xlsx")
+    assert report.status_code == 200
+    report_sheet = load_workbook(io.BytesIO(report.content), read_only=True).active
+    report_rows = list(report_sheet.iter_rows(values_only=True))
+    assert len(report_rows) == 2
+    assert report_rows[1][4] == 2
 
 
 def test_self_intersection_and_far_polygon_are_rejected(test_app):

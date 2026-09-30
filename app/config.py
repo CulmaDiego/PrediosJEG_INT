@@ -46,7 +46,13 @@ class Settings:
         if not secret:
             if environment == "production":
                 raise RuntimeError("PREDIOS_SECRET_KEY es obligatorio en producción")
-            secret = secrets.token_urlsafe(48)
+            secret_file = data_dir / "config" / "dev-secret.txt"
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            if secret_file.is_file():
+                secret = secret_file.read_text(encoding="utf-8").strip()
+            else:
+                secret = secrets.token_urlsafe(48)
+                secret_file.write_text(secret, encoding="utf-8")
         return cls(
             environment=environment,
             data_dir=data_dir,

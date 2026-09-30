@@ -123,22 +123,24 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     assert failed["done"]
                     page.locator("#confirmButton").click()
                     page.locator("#sendButton").click()
-                    expect(page.locator("#mapStatus")).to_contain_text("Guardado")
-                    page.locator('[data-tool="move"]').click()
-                    page.mouse.move(map_box["x"] + 90, map_box["y"] + 140)
-                    page.mouse.down()
-                    page.mouse.move(map_box["x"] + 1000, map_box["y"] + 1000, steps=10)
-                    page.mouse.up()
-                    center_lat = float(page.locator("#map").get_attribute("data-center-lat"))
-                    center_lon = float(page.locator("#map").get_attribute("data-center-lon"))
-                    assert abs(center_lat - lat) <= settings.window_radius_m / 111_320
-                    assert abs(center_lon - lon) <= settings.window_radius_m / (111_320 * math.cos(math.radians(lat)))
+                    expect(page.get_by_role("heading", name="Respuesta recibida")).to_be_visible()
+                    expect(page.get_by_text("Ya puede cerrar esta pestaña o ventana.")).to_be_visible()
                 page.close()
 
             landscape = browser.new_page(viewport={"width": 667, "height": 375})
             landscape.goto(f"http://127.0.0.1:{port}/p/{token}", wait_until="networkidle")
             assert landscape.locator("body").evaluate("el => el.scrollWidth <= el.clientWidth")
             assert landscape.locator(".tool-dock").is_visible()
+            landscape_map = landscape.locator("#map").bounding_box()
+            assert landscape_map
+            landscape.mouse.move(landscape_map["x"] + 120, landscape_map["y"] + 100)
+            landscape.mouse.down()
+            landscape.mouse.move(landscape_map["x"] + 1000, landscape_map["y"] + 800, steps=10)
+            landscape.mouse.up()
+            center_lat = float(landscape.locator("#map").get_attribute("data-center-lat"))
+            center_lon = float(landscape.locator("#map").get_attribute("data-center-lon"))
+            assert abs(center_lat - lat) <= settings.window_radius_m / 111_320
+            assert abs(center_lon - lon) <= settings.window_radius_m / (111_320 * math.cos(math.radians(lat)))
             landscape.close()
             browser.close()
     finally:

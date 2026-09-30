@@ -28,6 +28,8 @@ Abra PowerShell en el repositorio y ejecute:
 
 El primer inicio crea `..\PrediosRemotos_data_dev`, instala versiones fijadas, aplica migraciones, solicita la contraseña del administrador e inicia web y trabajador. QGIS aporta GDAL, pero no se usa como servidor Python. Abra `http://127.0.0.1:8000`. Nunca usa datos de producción por defecto.
 
+Los enlaces públicos son estables: reiniciar una respuesta elimina sus dibujos y devuelve la persona a pendiente, pero conserva la misma URL. El panel permite copiar un enlace individual y descargar en Excel todos los enlaces o los de un municipio. Cada envío crea una versión nueva; las exportaciones GIS y Excel incluyen solo la última versión vigente de cada persona.
+
 Los datos quedan fuera del checkout:
 
 ```text

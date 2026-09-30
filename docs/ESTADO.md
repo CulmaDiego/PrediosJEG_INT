@@ -15,6 +15,8 @@ Fecha de actualización: 2026-09-29.
 - [x] Municipios activos/inactivos y listado paginado de personas.
 - [x] Validación completa CSV/XLSX, errores por fila y confirmación atómica.
 - [x] Celular normalizado único, enlaces preservados al actualizar y coordenadas protegidas si hay dibujo.
+- [x] Enlace público estable por persona, visible y copiable desde el detalle; descargas XLSX masivas para todos o por municipio.
+- [x] Reinicio administrativo de la respuesta sin cambiar el enlace: elimina sus versiones y devuelve el estado a pendiente.
 - [x] Tablero, filtros, estados, detalle e historial.
 - Verificación: pruebas HTTP de autenticación, XSS, SQL injection y archivos inválidos.
 
@@ -23,6 +25,7 @@ Fecha de actualización: 2026-09-29.
 - [x] Token aleatorio de 256 bits almacenado solo como hash, expiración y revocación.
 - [x] Mapa móvil vertical/horizontal, dibujo por puntos y a mano alzada, edición, borrado, deshacer y confirmación.
 - [x] Sobrezoom hasta nivel 24 reutilizando la última tesela nativa, con desplazamiento confinado al recorte de ortofoto para evitar áreas vacías.
+- [x] Ortofoto sin capa translúcida y pantalla final de “Respuesta recibida” después de cada envío.
 - [x] Identidad visual actualizada con la paleta institucional `#096e74`, `#44bec6`, `#bcd3d8`, `#7e9cac`, `#162f3e`, `#35596b`, `#949cac`, `#96a4ac`, `#61808e` y `#4c6674`.
 - [x] Borrador en `sessionStorage` y reintento tras error de red.
 - [x] Validación Polygon WGS84, 3–100 vértices, cierre, autointersección, área y distancia máxima.
@@ -37,6 +40,7 @@ Fecha de actualización: 2026-09-29.
 - [x] Ventana configurable de 350 m y teselas XYZ limitadas a esa ventana.
 - [x] Autorización de cada tesela contra persona/enlace.
 - [x] Exportaciones vigentes GeoJSON, GeoPackage, Shapefile y Excel.
+- [x] Las exportaciones masivas, incluido Shapefile, seleccionan únicamente la última versión de cada persona.
 - [x] Inventario de las ocho fuentes reales en `docs/ORTOFOTOS.md`.
 - Verificación: el trabajador catalogó las 8 fuentes con GDAL; una ventana real del TIFF de San Rafael produjo 52 teselas (zoom 15–18) y quedó en estado `LISTO`.
 

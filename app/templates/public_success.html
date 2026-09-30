@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Respuesta recibida · Predios Remotos{% endblock %}
+{% block body_class %}public-message-page{% endblock %}
+{% block body %}
+<main class="public-message success-message">
+  <span class="success-check" aria-hidden="true">✓</span>
+  <p class="eyebrow">Envío completado</p>
+  <h1>Respuesta recibida</h1>
+  <p>Gracias, {{ person.name }}. El contorno de su predio quedó guardado correctamente{% if version %} como versión {{ version }}{% endif %}.</p>
+  <p class="close-note">Ya puede cerrar esta pestaña o ventana.</p>
+</main>
+{% endblock %}
