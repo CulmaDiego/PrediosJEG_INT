@@ -30,6 +30,7 @@ Fecha de actualización: 2026-09-30.
 - [x] Ortofoto sin capa translúcida y pantalla final de “Respuesta recibida” después de cada envío.
 - [x] Ortofoto realzada sin velos de relleno; el dibujo a mano muestra el trazo en vivo, se cierra al regresar al inicio y simplifica automáticamente los vértices para facilitar la edición.
 - [x] Identidad visual actualizada con la paleta institucional `#096e74`, `#44bec6`, `#bcd3d8`, `#7e9cac`, `#162f3e`, `#35596b`, `#949cac`, `#96a4ac`, `#61808e` y `#4c6674`.
+- [x] Logo institucional de Jorge Eliecer Gaitán integrado en administración, acceso, mapa móvil y mensajes públicos, con navegación y componentes visuales refinados.
 - [x] Borrador en `sessionStorage` y reintento tras error de red.
 - [x] Validación Polygon WGS84, 3–100 vértices, cierre, autointersección, área y distancia máxima.
 - [x] Versiones inmutables y una sola vigente.

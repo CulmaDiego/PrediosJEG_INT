@@ -118,6 +118,7 @@ def test_public_link_shows_preparation_message_until_tiles_are_ready(test_app):
     response = client.get(f"/p/{token}")
     assert response.status_code == 409
     assert "Estamos preparando la imagen" in response.text
+    assert "/static/logo-jorge-color.png" in response.text
 
 
 def test_generated_tiles_are_verified_at_reference_point(tmp_path):

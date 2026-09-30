@@ -3,7 +3,7 @@ param(
     [string]$InstallDir = 'C:\PrediosRemotos\app',
     [string]$DataDir = 'D:\PrediosRemotos\datos',
     [string]$OrthoDir = 'D:\PrediosRemotos\ortofotos',
-    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.2.1'
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.3.0'
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Instale Git para Windows.' }

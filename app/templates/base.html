@@ -3,25 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Gestión municipal de predios sobre ortofotos">
+  <meta name="description" content="Predios Remotos · Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración">
   <title>{% block title %}Predios Remotos{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/app.css?v=10">
+  <link rel="stylesheet" href="/static/app.css?v=11">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}admin-shell{% endblock %}">
   {% block body %}
   <aside class="sidebar">
-    <a class="brand" href="/admin" aria-label="Predios Remotos, inicio">
-      <span class="brand-mark" aria-hidden="true">PR</span>
-      <span>Predios<br><strong>Remotos</strong></span>
+    <a class="brand company-brand" href="/admin" aria-label="Jorge Eliecer Gaitán, Predios Remotos, inicio">
+      <span class="brand-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración"></span>
+      <span class="brand-product">Predios <strong>Remotos</strong></span>
     </a>
     <nav aria-label="Navegación principal">
-      <a href="/admin">Resumen</a>
-      <a href="/admin/municipios">Municipios</a>
-      <a href="/admin/personas">Personas</a>
-      <a href="/admin/importar">Importar</a>
-      <a href="/admin/ortofotos">Ortofotos</a>
+      <a href="/admin" {% if request.url.path == '/admin' %}class="active" aria-current="page"{% endif %}>Resumen</a>
+      <a href="/admin/municipios" {% if request.url.path.startswith('/admin/municipios') %}class="active" aria-current="page"{% endif %}>Municipios</a>
+      <a href="/admin/personas" {% if request.url.path.startswith('/admin/personas') %}class="active" aria-current="page"{% endif %}>Personas</a>
+      <a href="/admin/importar" {% if request.url.path.startswith('/admin/importar') %}class="active" aria-current="page"{% endif %}>Importar</a>
+      <a href="/admin/ortofotos" {% if request.url.path.startswith('/admin/ortofotos') or request.url.path.startswith('/admin/reportes') %}class="active" aria-current="page"{% endif %}>Ortofotos</a>
     </nav>
     <form method="post" action="/admin/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
@@ -30,7 +30,7 @@
   </aside>
   <main class="admin-main">
     <header class="mobile-topbar">
-      <a class="brand compact" href="/admin"><span class="brand-mark">PR</span><strong>Predios Remotos</strong></a>
+      <a class="brand compact" href="/admin"><span class="brand-logo-frame"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán"></span><strong>Predios Remotos</strong></a>
       <details>
         <summary aria-label="Abrir menú">Menú</summary>
         <nav>

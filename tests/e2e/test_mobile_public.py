@@ -93,6 +93,8 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                 page.on("response", lambda response: tile_ok.append(response.status) if "/tiles/" in response.url else None)
                 page.goto(f"http://127.0.0.1:{port}/p/{token}", wait_until="networkidle")
                 page.wait_for_selector(".leaflet-map-pane", state="attached")
+                expect(page.locator(".public-logo-frame img")).to_be_visible()
+                assert page.locator(".public-logo-frame img").evaluate("image => image.complete && image.naturalWidth > 0")
                 assert page.locator("#map").bounding_box()["height"] > 200
                 assert page.locator("body").evaluate("el => el.scrollWidth <= el.clientWidth")
                 assert page.locator("#confirmButton").is_visible()
@@ -154,6 +156,7 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.locator("#sendButton").click()
                     expect(page.get_by_role("heading", name="Respuesta recibida")).to_be_visible()
                     expect(page.get_by_text("Ya puede cerrar esta pestaña o ventana.")).to_be_visible()
+                    expect(page.locator(".message-logo-frame img")).to_be_visible()
                 page.close()
 
             landscape = browser.new_page(viewport={"width": 667, "height": 375})

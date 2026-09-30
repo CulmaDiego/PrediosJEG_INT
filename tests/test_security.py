@@ -55,6 +55,7 @@ def test_admin_surfaces_render(test_app):
     for path in ("/admin", "/admin/municipios", "/admin/personas", f"/admin/personas/{person_id}", "/admin/importar", "/admin/ortofotos"):
         response = client.get(path)
         assert response.status_code == 200, path
+        assert "/static/logo-jorge-color.png" in response.text
 
 
 def test_concurrent_public_reads_and_audit_writes_under_wal(test_app):
