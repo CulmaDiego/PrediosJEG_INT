@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Importar · Predios Remotos{% endblock %}
 {% block content %}
-<div class="page-head"><div><p class="eyebrow">Validación previa</p><h1>Importar personas</h1><p class="muted">El archivo completo se valida antes de modificar datos.</p></div></div>
+<div class="page-head"><div><p class="eyebrow">Validación previa</p><h1>Importar personas</h1><p class="muted">El archivo completo se valida antes de modificar datos.</p></div><a class="button secondary" href="/admin/personas/nueva">Crear una sola persona</a></div>
 <div class="split-grid">
   <section class="panel"><div class="panel-head"><h2>Nuevo archivo</h2></div>
     <form method="post" enctype="multipart/form-data" class="stack-form">
@@ -15,4 +15,3 @@
   <section class="panel"><div class="panel-head"><h2>Importaciones recientes</h2></div><div class="version-list">{% for batch in batches %}<div><strong>{{ batch.original_name }}</strong><span class="status status-{{ batch.status|lower }}">{{ batch.status }}</span><small>{{ batch.municipality.name }} · {{ batch.row_count }} filas · {{ batch.created_at }}</small></div>{% else %}<p class="empty">Todavía no hay importaciones.</p>{% endfor %}</div></section>
 </div>
 {% endblock %}
-

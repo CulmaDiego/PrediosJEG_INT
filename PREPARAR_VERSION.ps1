@@ -13,7 +13,6 @@ Write-Host 'Revise los cambios anteriores. Cuando esté conforme:' -ForegroundCo
 Write-Host '  git add .'
 Write-Host '  git commit -m "Descripción de la versión"'
 Write-Host '  git push origin SU_RAMA'
-Write-Host '  git tag -a v0.1.0 -m "Predios Remotos v0.1.0"'
-Write-Host '  git push origin v0.1.0'
+Write-Host '  git tag -a v0.2.0 -m "Predios Remotos v0.2.0"'
+Write-Host '  git push origin v0.2.0'
 Write-Host 'Este script no publicó ni sobrescribió ningún cambio.' -ForegroundColor Yellow
-

@@ -26,10 +26,12 @@ document.querySelectorAll('[data-selection-form]').forEach((form) => {
   const selectAll = form.querySelector('[data-select-all]');
   const count = form.querySelector('[data-selected-count]');
   const submit = form.querySelector('[data-confirm-selected]');
+  const prepare = form.querySelector('[data-prepare-selected]');
   const refresh = () => {
     const selected = selections.filter(checkbox => checkbox.checked).length;
     if (count) count.textContent = String(selected);
     if (submit) submit.disabled = selected === 0;
+    if (prepare) prepare.disabled = selected === 0;
     if (selectAll) {
       selectAll.checked = selections.length > 0 && selected === selections.length;
       selectAll.indeterminate = selected > 0 && selected < selections.length;

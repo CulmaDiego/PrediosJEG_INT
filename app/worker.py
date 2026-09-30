@@ -9,12 +9,13 @@ import subprocess
 import time
 import uuid
 from datetime import timedelta
+
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from .config import Settings
 from .db import build_engine, build_session_factory
-from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_command, qgis_environment, qgis_tool
+from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_command, qgis_environment, qgis_tool, verify_generated_tiles
 from .models import Job, Municipality, OrthophotoSource, Person, TileWindow, utcnow
 
 
@@ -141,6 +142,11 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     if tiles.returncode != 0:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise RuntimeError(f"gdal2tiles: {tiles.stderr.strip()}")
+    try:
+        verify_generated_tiles(output_dir, person.reference_lon, person.reference_lat, settings.tile_min_zoom, settings.tile_max_zoom)
+    except Exception:
+        shutil.rmtree(output_dir, ignore_errors=True)
+        raise
     db.expire_all()
     person = db.get(Person, person_id)
     job = db.get(Job, job_id)

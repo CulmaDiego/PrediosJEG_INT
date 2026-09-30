@@ -66,6 +66,11 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
             path = data / "tiles" / "e2e" / "18" / str(tile_x) / f"{tile_y}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(PNG)
+    for zoom in range(15, 18):
+        center_x, center_y = tile_xy(lon, lat, zoom)
+        path = data / "tiles" / "e2e" / str(zoom) / str(center_x) / f"{center_y}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(PNG)
 
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))

@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Fecha de actualización: 2026-09-29.
+Fecha de actualización: 2026-09-30.
 
 ## Etapa 1 — Base local y seguridad
 
@@ -14,6 +14,7 @@ Fecha de actualización: 2026-09-29.
 
 - [x] Municipios activos/inactivos y listado paginado de personas.
 - [x] Validación completa CSV/XLSX, errores por fila y confirmación atómica.
+- [x] Alta manual de una persona con las mismas reglas de nombre, celular y coordenadas usadas por la importación.
 - [x] Celular normalizado único, enlaces preservados al actualizar y coordenadas protegidas si hay dibujo.
 - [x] Enlace público estable por persona, visible y copiable desde el detalle; descargas XLSX masivas para todos o por municipio.
 - [x] Reinicio administrativo de la respuesta sin cambiar el enlace: elimina sus versiones y devuelve el estado a pendiente.
@@ -39,6 +40,8 @@ Fecha de actualización: 2026-09-29.
 - [x] Inventario GDAL en lectura y errores por fuente sin detener el catálogo.
 - [x] Cola SQLite reanudable, reclamo atómico, progreso y errores visibles.
 - [x] Ventana configurable de 350 m y teselas XYZ limitadas a esa ventana.
+- [x] Generación y regeneración manual por persona, selección o municipio, con verificación física de la tesela central en cada nivel.
+- [x] Descarga de enlaces limitada a personas con imágenes verificadas; los enlaces pendientes muestran una pantalla de preparación en lugar de un mapa vacío.
 - [x] Autorización de cada tesela contra persona/enlace.
 - [x] Exportaciones vigentes GeoJSON, GeoPackage, Shapefile y Excel.
 - [x] Las exportaciones masivas, incluido Shapefile, seleccionan únicamente la última versión de cada persona.

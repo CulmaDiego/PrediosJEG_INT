@@ -9,8 +9,8 @@ Desde el repositorio:
 ```powershell
 .\PREPARAR_VERSION.ps1
 git status
-git tag -a v0.1.0 -m "Predios Remotos v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Predios Remotos v0.2.0"
+git push origin v0.2.0
 ```
 
 Use una etiqueta nueva en cada entrega (`v0.1.1`, `v0.2.0`, etc.). Producción se actualiza únicamente a etiquetas revisadas, no a cambios sueltos de una rama.
@@ -43,7 +43,7 @@ Abra PowerShell **como administrador**, ubique una copia de `INSTALAR_PROD.ps1` 
   -InstallDir 'C:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.1.0'
+  -Version 'v0.2.0'
 ```
 
 El instalador solicita el dominio HTTPS público y la contraseña inicial del administrador. También crea `production.env`, instala las dependencias fijadas, aplica Alembic y registra `PrediosRemotos-Web` y `PrediosRemotos-Worker`.
@@ -80,7 +80,7 @@ https://predios.entidad.gov.co/health
 https://predios.entidad.gov.co/ready
 ```
 
-Luego pruebe inicio de sesión, importación de una persona de ensayo, generación de teselas, apertura del enlace público, envío y descarga de la última versión.
+Luego pruebe inicio de sesión, creación manual e importación de una persona de ensayo, generación y verificación de teselas, descarga del enlace listo, apertura pública, envío y descarga de la última versión.
 
 ## 5. Actualizaciones posteriores
 
@@ -88,7 +88,7 @@ Primero publique una etiqueta nueva desde desarrollo. En el PC de producción, a
 
 ```powershell
 Set-Location C:\PrediosRemotos\app
-.\ACTUALIZAR_PROD.ps1 -Version v0.1.1
+.\ACTUALIZAR_PROD.ps1 -Version v0.2.1
 ```
 
 El actualizador exige un checkout limpio, crea y verifica un respaldo completo, detiene web y trabajador, instala la etiqueta, aplica migraciones, reinicia y valida `/health` y `/ready`. Si falla, restaura juntos el commit y el respaldo.

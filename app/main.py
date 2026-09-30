@@ -18,10 +18,11 @@ from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from . import __version__
 from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
-from .gis import qgis_environment, qgis_tool, validate_polygon
-from .importer import validate_import
+from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
+from .importer import normalize_phone, parse_coordinates, validate_import
 from .models import (
     Admin,
     AuditLog,
@@ -79,6 +80,49 @@ def _job(db: Session, job_type: str, payload: dict) -> Job:
     job = Job(job_type=job_type, payload_json=serialized, status="PENDIENTE")
     db.add(job)
     return job
+
+
+def _queue_tile_jobs(db: Session, people: list[Person]) -> dict[str, int]:
+    requested = 0
+    without_coordinates = 0
+    for person in people:
+        if person.reference_lon is None or person.reference_lat is None:
+            without_coordinates += 1
+            continue
+        _job(db, "PREPARE_WINDOW", {"person_id": person.id})
+        person.orthophoto_status = "PENDIENTE"
+        person.orthophoto_error = None
+        requested += 1
+    return {"requested": requested, "without_coordinates": without_coordinates}
+
+
+def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  # type: ignore[no-untyped-def]
+    ready: list[Person] = []
+    for person in db.scalars(query).all():
+        window = db.get(TileWindow, person.id)
+        if (
+            person.reference_lon is None
+            or person.reference_lat is None
+            or person.orthophoto_status != "LISTO"
+            or not window
+            or window.status != "LISTO"
+            or not window.relative_dir
+            or window.min_zoom is None
+            or window.max_zoom is None
+        ):
+            continue
+        try:
+            verify_generated_tiles(
+                settings.data_dir / "tiles" / window.relative_dir,
+                person.reference_lon,
+                person.reference_lat,
+                window.min_zoom,
+                window.max_zoom,
+            )
+        except (OSError, RuntimeError):
+            continue
+        ready.append(person)
+    return ready
 
 
 def _audit(db: Session, request: Request, action: str, actor: str, person_id: int | None = None, details: dict | None = None) -> None:
@@ -261,7 +305,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok", "version": "0.1.0"}
+        return {"status": "ok", "version": __version__}
 
     @app.get("/ready")
     def ready(request: Request, db: Session = Depends(get_db)) -> JSONResponse:
@@ -401,6 +445,31 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         deleted_count = _delete_people(db, request, session.admin.username, person_ids, settings)
         return RedirectResponse(f"/admin/municipios?eliminadas={deleted_count}", status_code=303)
 
+    @app.post("/admin/municipios/{municipality_id}/preparar-teselas")
+    def municipality_tiles_prepare(
+        municipality_id: int,
+        request: Request,
+        csrf_token: str = Form(...),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        municipality = db.get(Municipality, municipality_id)
+        if not municipality:
+            raise HTTPException(404)
+        people = list(
+            db.scalars(
+                select(Person).where(Person.municipality_id == municipality_id, Person.active.is_(True)).order_by(Person.id)
+            ).all()
+        )
+        result = _queue_tile_jobs(db, people)
+        _audit(db, request, "TESELAS_MUNICIPIO_SOLICITADAS", session.admin.username, details={"municipality_id": municipality_id, **result})
+        db.commit()
+        return RedirectResponse(
+            f"/admin/municipios?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}",
+            status_code=303,
+        )
+
     @app.get("/admin/personas", response_class=HTMLResponse)
     def people_page(
         request: Request,
@@ -444,6 +513,81 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         deleted_count = _delete_people(db, request, session.admin.username, selected, settings)
         return RedirectResponse(f"/admin/personas?eliminadas={deleted_count}", status_code=303)
 
+    @app.post("/admin/personas/preparar-teselas")
+    def people_tiles_prepare(
+        request: Request,
+        csrf_token: str = Form(...),
+        person_ids: list[int] | None = Form(None),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        selected = {person_id for person_id in person_ids or [] if person_id > 0}
+        people = list(db.scalars(select(Person).where(Person.id.in_(selected), Person.active.is_(True)).order_by(Person.id)).all()) if selected else []
+        result = _queue_tile_jobs(db, people)
+        _audit(db, request, "TESELAS_PERSONAS_SOLICITADAS", session.admin.username, details={"person_ids": sorted(selected), **result})
+        db.commit()
+        return RedirectResponse(
+            f"/admin/personas?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}",
+            status_code=303,
+        )
+
+    @app.get("/admin/personas/nueva", response_class=HTMLResponse)
+    def person_create_page(request: Request, db: Session = Depends(get_db)) -> Response:
+        session = require_admin(request, db)
+        municipalities = db.scalars(select(Municipality).where(Municipality.active.is_(True)).order_by(Municipality.name)).all()
+        return render(request, "person_form.html", {"admin": session.admin, "municipalities": municipalities, "values": {}})
+
+    @app.post("/admin/personas/nueva", response_class=HTMLResponse)
+    def person_create(
+        request: Request,
+        municipality_id: int = Form(...),
+        name: str = Form(...),
+        phone: str = Form(...),
+        coordinates: str = Form(""),
+        observation: str = Form(""),
+        csrf_token: str = Form(...),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        municipalities = db.scalars(select(Municipality).where(Municipality.active.is_(True)).order_by(Municipality.name)).all()
+        values = {"municipality_id": municipality_id, "name": name, "phone": phone, "coordinates": coordinates, "observation": observation}
+        municipality = db.get(Municipality, municipality_id)
+        try:
+            clean_name = " ".join(name.split())
+            if not clean_name or len(clean_name) > 200:
+                raise ValueError("El nombre es obligatorio y admite máximo 200 caracteres")
+            clean_phone = normalize_phone(phone)
+            lon, lat = parse_coordinates(coordinates)
+            clean_observation = observation.strip()
+            if len(clean_observation) > 2000:
+                raise ValueError("La observación admite máximo 2000 caracteres")
+            if not municipality or not municipality.active:
+                raise ValueError("Seleccione un municipio activo")
+            if db.scalar(select(Person.id).where(Person.phone == clean_phone)):
+                return render(request, "person_form.html", {"admin": session.admin, "municipalities": municipalities, "values": values, "error": "Ya existe una persona con ese celular."}, 409)
+        except ValueError as exc:
+            return render(request, "person_form.html", {"admin": session.admin, "municipalities": municipalities, "values": values, "error": str(exc)}, 422)
+        person = Person(
+            municipality_id=municipality.id,
+            name=clean_name,
+            phone=clean_phone,
+            reference_lon=lon,
+            reference_lat=lat,
+            observation=clean_observation,
+        )
+        db.add(person)
+        try:
+            db.flush()
+            result = _queue_tile_jobs(db, [person])
+            _audit(db, request, "PERSONA_CREADA", session.admin.username, person.id, {"municipality_id": municipality.id, **result})
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return render(request, "person_form.html", {"admin": session.admin, "municipalities": municipalities, "values": values, "error": "Ya existe una persona con ese celular."}, 409)
+        return RedirectResponse(f"/admin/personas/{person.id}?creada=1&teselas={result['requested']}", status_code=303)
+
     @app.get("/admin/personas/{person_id}", response_class=HTMLResponse)
     def person_detail(person_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
@@ -472,6 +616,19 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         db.commit()
         return RedirectResponse(f"/admin/personas/{person_id}?reiniciado=1", status_code=303)
 
+    @app.post("/admin/personas/{person_id}/preparar-teselas")
+    def person_tiles_prepare(person_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        person = db.get(Person, person_id)
+        if not person or not person.active:
+            raise HTTPException(404)
+        result = _queue_tile_jobs(db, [person])
+        _audit(db, request, "TESELAS_PERSONA_SOLICITADAS", session.admin.username, person.id, result)
+        db.commit()
+        state = "solicitadas" if result["requested"] else "sin-coordenadas"
+        return RedirectResponse(f"/admin/personas/{person_id}?teselas={state}", status_code=303)
+
     @app.post("/admin/personas/{person_id}/eliminar")
     def person_delete(person_id: int, request: Request, csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
@@ -484,10 +641,10 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.get("/admin/enlaces")
     def links_download(request: Request, municipality_id: int | None = None, db: Session = Depends(get_db)) -> Response:
         require_admin(request, db)
-        query = select(Person).where(Person.active.is_(True)).order_by(Person.name)
+        query = select(Person).where(Person.active.is_(True), Person.orthophoto_status == "LISTO").order_by(Person.name)
         if municipality_id:
             query = query.where(Person.municipality_id == municipality_id)
-        people = list(db.scalars(query).all())
+        people = _verified_people(db, query, settings)
         output = _links_workbook(people, settings)
         suffix = f"_municipio_{municipality_id}" if municipality_id else "_todos"
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="enlaces{suffix}.xlsx"'})
@@ -499,7 +656,11 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         municipality = db.get(Municipality, municipality_id)
         if not municipality:
             raise HTTPException(404)
-        people = db.scalars(select(Person).where(Person.municipality_id == municipality_id, Person.active.is_(True)).order_by(Person.name)).all()
+        people = _verified_people(
+            db,
+            select(Person).where(Person.municipality_id == municipality_id, Person.active.is_(True), Person.orthophoto_status == "LISTO").order_by(Person.name),
+            settings,
+        )
         output = _links_workbook(people, settings)
         filename = quote(f"enlaces_{municipality.name}.xlsx")
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
@@ -673,12 +834,24 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         person = link.person
         if person.reference_lon is None or person.reference_lat is None:
             return render(request, "public_invalid.html", {"message": "Este registro todavía no tiene una coordenada válida."}, 409)
+        window = db.get(TileWindow, person.id)
+        if not window or window.status != "LISTO" or not window.relative_dir:
+            return render(request, "public_preparing.html", {"person": person}, 409)
+        try:
+            verify_generated_tiles(
+                settings.data_dir / "tiles" / window.relative_dir,
+                person.reference_lon,
+                person.reference_lat,
+                window.min_zoom if window.min_zoom is not None else settings.tile_min_zoom,
+                window.max_zoom if window.max_zoom is not None else settings.tile_max_zoom,
+            )
+        except (OSError, RuntimeError):
+            return render(request, "public_preparing.html", {"person": person}, 409)
         if person.status == "PENDIENTE":
             person.status = "ABRIO"
         person.last_opened_at = utcnow()
         _audit(db, request, "ENLACE_ABIERTO", "PUBLICO", person.id)
         db.commit()
-        window = db.get(TileWindow, person.id)
         current = db.scalar(select(DrawingVersion).where(DrawingVersion.person_id == person.id, DrawingVersion.is_current.is_(True)))
         return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "current_geometry": current.geometry_json if current else "null"})
 

@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head"><div><a class="back-link" href="/admin/personas">Personas</a><h1>{{ person.name }}</h1><p class="muted">{{ person.phone }} · {{ person.municipality.name }}</p></div><span class="status status-{{ person.status|lower }} large">{{ person.status.replace('_',' ') }}</span></div>
 {% if request.query_params.get('reiniciado') %}<div class="alert success" role="status">La respuesta fue reiniciada. El enlace continúa siendo el mismo.</div>{% endif %}
+{% if request.query_params.get('creada') %}<div class="alert success" role="status">La persona fue creada correctamente.{% if request.query_params.get('teselas') == '1' %} La imagen quedó en cola para generación y verificación.{% endif %}</div>{% elif request.query_params.get('teselas') == 'solicitadas' %}<div class="alert success" role="status">La imagen quedó en cola para generación y verificación.</div>{% elif request.query_params.get('teselas') == 'sin-coordenadas' %}<div class="alert danger" role="alert">Agregue una coordenada de referencia antes de generar las teselas.</div>{% endif %}
 <div class="detail-grid">
   <section class="panel">
     <div class="panel-head"><h2>Datos</h2></div>
@@ -10,7 +11,13 @@
     <div class="link-copy-zone">
       <label>Enlace de la persona</label>
       <div class="copy-row"><input id="personPublicUrl" value="{{ public_url }}" readonly><button class="button secondary" type="button" data-copy-target="#personPublicUrl">Copiar enlace</button></div>
+      {% if person.orthophoto_status != 'LISTO' %}<p class="hint">No envíe todavía este enlace. Solo estará incluido en la descarga masiva cuando la imagen quede en estado LISTO.</p>{% endif %}
     </div>
+    <form method="post" action="/admin/personas/{{ person.id }}/preparar-teselas" class="action-zone">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <p>Genera nuevamente la ventana y comprueba que existan teselas PNG en el punto de referencia.</p>
+      <button class="button secondary" type="submit" {% if person.reference_lon is none %}disabled{% endif %}>Generar y verificar teselas</button>
+    </form>
     <form method="post" action="/admin/personas/{{ person.id }}/reiniciar" class="danger-zone">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
       <p>Elimina todas las versiones dibujadas y devuelve la persona a pendiente. El enlace no cambia.</p>

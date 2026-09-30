@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head"><div><p class="eyebrow">Organización territorial</p><h1>Municipios</h1></div></div>
 {% if request.query_params.get('eliminadas') %}<div class="alert success" role="status">Se eliminaron completamente {{ request.query_params.get('eliminadas') }} persona(s) del municipio. El municipio continúa disponible.</div>{% endif %}
+{% if request.query_params.get('teselas_solicitadas') %}<div class="alert success" role="status">Se enviaron {{ request.query_params.get('teselas_solicitadas') }} persona(s) a generación y verificación.{% if request.query_params.get('sin_coordenadas') != '0' %} {{ request.query_params.get('sin_coordenadas') }} fueron omitidas por no tener coordenadas.{% endif %}</div>{% endif %}
 <div class="split-grid wide-left">
   <section class="panel">
     <div class="panel-head"><h2>Municipios registrados</h2></div>
@@ -16,6 +17,7 @@
         <button class="button secondary" type="submit">Guardar</button>
         <a class="button ghost" href="/admin/enlaces?municipality_id={{ municipality.id }}">Descargar enlaces</a>
         {% set person_count = people_counts.get(municipality.id, 0) %}
+        <button class="button secondary" type="submit" formaction="/admin/municipios/{{ municipality.id }}/preparar-teselas" {% if not person_count %}disabled{% endif %}>Generar y verificar teselas</button>
         <button class="button danger" type="submit" formaction="/admin/municipios/{{ municipality.id }}/personas/eliminar" {% if not person_count %}disabled{% endif %} data-confirm="Esta acción es permanente. Se eliminarán las {{ person_count }} persona(s) de {{ municipality.name }}, con todos sus enlaces, dibujos, teselas y archivos derivados. El municipio no se eliminará. ¿Desea continuar?">Eliminar sus {{ person_count }} persona(s)</button>
       </form>
       {% else %}<p class="empty">Cree el primer municipio.</p>{% endfor %}

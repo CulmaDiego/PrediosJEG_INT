@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Nueva persona · Predios Remotos{% endblock %}
+{% block content %}
+<div class="page-head"><div><a class="back-link" href="/admin/personas">Personas</a><h1>Crear una persona</h1><p class="muted">Para cargas grandes puede continuar usando Excel o CSV.</p></div><a class="button ghost" href="/admin/importar">Importar archivo</a></div>
+{% if error %}<div class="alert danger" role="alert">{{ error }}</div>{% endif %}
+<section class="panel form-panel">
+  <form method="post" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+    <label>Municipio<select name="municipality_id" required><option value="">Seleccione…</option>{% for municipality in municipalities %}<option value="{{ municipality.id }}" {% if values.municipality_id == municipality.id %}selected{% endif %}>{{ municipality.name }}</option>{% endfor %}</select></label>
+    <label>Nombre completo<input name="name" value="{{ values.name or '' }}" required maxlength="200" autocomplete="name"></label>
+    <label>Celular<input name="phone" value="{{ values.phone or '' }}" required maxlength="30" inputmode="tel" autocomplete="tel" placeholder="Ej. 300 123 4567"></label>
+    <label>Coordenadas WGS84<input name="coordinates" value="{{ values.coordinates or '' }}" placeholder="Ej. 6.294,-75.031"></label>
+    <p class="hint">Use latitud,longitud. Si agrega la coordenada, las teselas se generarán automáticamente al guardar.</p>
+    <label>Observación<textarea name="observation" maxlength="2000" rows="4">{{ values.observation or '' }}</textarea></label>
+    <button class="button primary" type="submit">Crear persona</button>
+  </form>
+</section>
+{% endblock %}

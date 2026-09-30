@@ -107,16 +107,31 @@ def bounds_intersect(a: list[float], b: tuple[float, float, float, float]) -> bo
     return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
 
 
+def tile_xy(lon: float, lat: float, zoom: int) -> tuple[int, int]:
+    n = 2**zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
+    return x, y
+
+
+def verify_generated_tiles(output_dir: Path, lon: float, lat: float, min_zoom: int, max_zoom: int) -> int:
+    verified = 0
+    for zoom in range(min_zoom, max_zoom + 1):
+        x, y = tile_xy(lon, lat, zoom)
+        center_tile = output_dir / str(zoom) / str(x) / f"{y}.png"
+        if not center_tile.is_file() or center_tile.stat().st_size < 8:
+            raise RuntimeError(f"La verificación no encontró una tesela en el punto de referencia para el zoom {zoom}")
+        with center_tile.open("rb") as file:
+            if file.read(8) != b"\x89PNG\r\n\x1a\n":
+                raise RuntimeError(f"La tesela central del zoom {zoom} no es un PNG válido")
+        verified += 1
+    return verified
+
+
 def tile_range_for_bounds(lon: float, lat: float, radius_m: int, zoom: int) -> tuple[int, int, int, int]:
     lat_delta = radius_m / 111_320
     lon_delta = radius_m / (111_320 * max(math.cos(math.radians(lat)), 0.2))
 
-    def tile_xy(x_lon: float, y_lat: float) -> tuple[int, int]:
-        n = 2**zoom
-        x = int((x_lon + 180.0) / 360.0 * n)
-        y = int((1.0 - math.asinh(math.tan(math.radians(y_lat))) / math.pi) / 2.0 * n)
-        return x, y
-
-    min_x, max_y = tile_xy(lon - lon_delta, lat - lat_delta)
-    max_x, min_y = tile_xy(lon + lon_delta, lat + lat_delta)
+    min_x, max_y = tile_xy(lon - lon_delta, lat - lat_delta, zoom)
+    max_x, min_y = tile_xy(lon + lon_delta, lat + lat_delta, zoom)
     return min_x, min_y, max_x, max_y

@@ -72,4 +72,4 @@ def test_concurrent_public_reads_and_audit_writes_under_wal(test_app):
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(lambda i: read_public(i) if i % 2 == 0 else write_audit(i), range(24)))
-    assert all(result in {1, 200} for result in results)
+    assert all(result in {1, 409} for result in results)

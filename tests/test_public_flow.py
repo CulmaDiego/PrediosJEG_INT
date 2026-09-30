@@ -5,6 +5,7 @@ import io
 from openpyxl import load_workbook
 from sqlalchemy import select
 
+from app.gis import tile_xy
 from app.models import DrawingVersion, Person, PublicLink, TileWindow
 from app.security import public_csrf, sha256, stable_public_token
 from tests.conftest import login
@@ -61,6 +62,16 @@ def test_bulk_links_and_exports_use_stable_links_and_latest_version(test_app):
     csrf = public_csrf(token, app.state.settings)
     client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294)})
     client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": square(-75.031, 6.294, 0.00015)})
+    with app.state.Session() as db:
+        person = db.get(Person, person_id)
+        person.orthophoto_status = "LISTO"
+        db.add(TileWindow(person_id=person_id, relative_dir="links-ready", min_zoom=15, max_zoom=19, status="LISTO"))
+        for zoom in range(15, 20):
+            x, y = tile_xy(person.reference_lon, person.reference_lat, zoom)
+            tile = app.state.settings.data_dir / "tiles" / "links-ready" / str(zoom) / str(x) / f"{y}.png"
+            tile.parent.mkdir(parents=True, exist_ok=True)
+            tile.write_bytes(b"\x89PNG\r\n\x1a\nverified")
+        db.commit()
     login(client)
 
     links = client.get("/admin/enlaces")
