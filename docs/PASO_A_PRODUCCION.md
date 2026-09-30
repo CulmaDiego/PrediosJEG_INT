@@ -1,119 +1,89 @@
-# Paso a producción
+# Paso a producción en el disco D:
 
-Esta guía instala **Predios Remotos** en un único PC Windows de la entidad. La aplicación y el trabajador quedan como tareas de inicio, los datos permanecen fuera del repositorio y Cloudflare Tunnel publica el servicio local sin abrir puertos entrantes.
+Esta guía instala **Predios Remotos v0.3.3** en un único PC Windows de la oficina. Código, base de datos, teselas y ortofotos quedan en `D:`; QGIS y Python pueden seguir instalados en `C:`. No conecte el dominio público hasta completar las comprobaciones locales.
 
-## 1. Preparar una versión en el PC de desarrollo
+## 1. Preparar el equipo de oficina
 
-Desde el repositorio:
+1. Confirme que `D:` es un **disco local fijo**, disponible después de reiniciar Windows, con espacio suficiente para los rásteres originales, teselas, exportaciones y respaldos. No use una unidad de red mapeada: las tareas se ejecutan como `SYSTEM`.
+2. Instale Git para Windows, Python **3.12 de 64 bits** con el lanzador `py`, y QGIS **3.44.3** con GDAL y soporte ECW. Si QGIS está en otra ruta, use `-QgisRoot` al instalar.
+3. Reserve un dominio ya administrado en Cloudflare, por ejemplo `https://predios.entidad.gov.co`. El instalador pedirá la URL real. No use `127.0.0.1` como URL pública.
+4. Obtenga las ortofotos desde el almacenamiento autorizado de la entidad y cópielas **antes de instalar** a `D:\PrediosRemotos\ortofotos`, conservando las subcarpetas de municipio y los archivos `.ecw`/`.tif`. No copie `Imagenes` dentro de `app` ni agregue los rásteres a Git. Consulte [el inventario esperado](ORTOFOTOS.md). El instalador rechaza una carpeta vacía.
+5. Compruebe que el cortafuegos/antivirus permita ejecutar Python y GDAL localmente, y que el equipo pueda llegar a GitHub y al índice de paquetes de Python durante la instalación. Para el túnel necesitará salida HTTPS hacia Cloudflare; no abra el puerto 8000 a Internet.
+
+Compruebe QGIS en PowerShell:
 
 ```powershell
-.\PREPARAR_VERSION.ps1
-git status
-git tag -a v0.3.2 -m "Predios Remotos v0.3.2"
-git push origin v0.3.2
+& 'C:\Program Files\QGIS 3.44.3\bin\gdalinfo.exe' --formats | Select-String ECW
 ```
 
-Use una etiqueta nueva en cada entrega (`v0.1.1`, `v0.2.0`, etc.). Producción se actualiza únicamente a etiquetas revisadas, no a cambios sueltos de una rama.
+Si no aparece ECW, resuelva ese controlador antes de importar personas. Las fuentes rásteres son de solo lectura para la aplicación.
 
-## 2. Preparar el PC de producción
+## 2. Instalar la versión publicada
 
-Instale:
-
-- Git para Windows.
-- Python 3.12 de 64 bits.
-- QGIS 3.44.3 con GDAL y el controlador necesario para las ortofotos.
-- `cloudflared` de 64 bits para Windows.
-
-Defina de antemano:
-
-- Carpeta de aplicación: `C:\PrediosRemotos\app`.
-- Carpeta de datos: `D:\PrediosRemotos\datos`.
-- Carpeta de ortofotos: `D:\PrediosRemotos\ortofotos`.
-- Dominio HTTPS definitivo, por ejemplo `https://predios.entidad.gov.co`.
-
-La carpeta de datos debe estar en un disco con respaldo y espacio suficiente para teselas. No coloque base de datos, ortofotos, teselas ni secretos dentro del checkout de Git.
-
-## 3. Primera instalación
-
-Abra PowerShell **como administrador**, ubique una copia de `INSTALAR_PROD.ps1` y ejecute:
+La etiqueta `v0.3.3` ya está publicada: **no la vuelva a crear ni la mueva**. Descargue una copia del repositorio o al menos `INSTALAR_PROD.ps1` en una carpeta temporal. Abra PowerShell **como administrador** en esa carpeta y ejecute:
 
 ```powershell
 .\INSTALAR_PROD.ps1 `
   -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG.git' `
-  -InstallDir 'C:\PrediosRemotos\app' `
+  -InstallDir 'D:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.3.2'
+  -Version 'v0.3.3'
 ```
 
-El instalador solicita el dominio HTTPS público y la contraseña inicial del administrador. También crea `production.env`, instala las dependencias fijadas, aplica Alembic y registra `PrediosRemotos-Web` y `PrediosRemotos-Worker`.
+Si el repositorio exige autenticación, Git se la pedirá; no incorpore credenciales en `-RepoUrl`. El instalador clonará la etiqueta, comprobará los recursos web locales, creará `D:\PrediosRemotos\datos\config\production.env`, solicitará el dominio HTTPS y una contraseña **nueva** de al menos 12 caracteres para `admin`, migrará la base y registrará las tareas `PrediosRemotos-Web` y `PrediosRemotos-Worker`. Se detendrá si falla algún paso. La contraseña de pruebas no se traslada automáticamente.
 
-Compruebe el origen local antes de publicarlo:
+**Guarde una copia segura de `production.env` fuera del PC**, con acceso restringido. Contiene `PREDIOS_SECRET_KEY`: cambiar esa clave invalida los enlaces públicos estables. Nunca suba el archivo a Git ni lo envíe por chat o correo.
+
+## 3. Verificar antes de publicar
+
+En el PC de oficina:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/ready
-Get-ScheduledTask -TaskName 'PrediosRemotos-*'
+Get-ScheduledTask -TaskName 'PrediosRemotos-*' | Select-Object TaskName,State
 ```
 
-Las dos primeras respuestas deben indicar `ok` y `ready`.
+Espere `status: ok`, `version: 0.3.3` y `status: ready`. Entre a `http://127.0.0.1:8000/admin` con `admin` y la contraseña recién creada. En **Ortofotos**, pulse **Actualizar catálogo** y confirme que aparezcan los municipios y que los rásteres sean legibles. Si no aparecen, revise las carpetas de `D:\PrediosRemotos\ortofotos`, el controlador GDAL y los mensajes del trabajador; **no distribuya enlaces todavía**. Cree una persona de prueba con coordenada dentro de una ortofoto, genere/verifique sus teselas y confirme que su enlace esté listo. Las ventanas usan **600 m de radio** alrededor del punto; el límite de vértices del polígono es una regla separada.
 
-## 4. Publicar con Cloudflare Tunnel
+Reinicie Windows una vez y repita las comprobaciones: las dos tareas deben arrancar con el disco `D:` disponible.
 
-En el panel de Cloudflare cree un túnel administrado remotamente y agregue una ruta de aplicación publicada:
+## 4. Publicar mediante Cloudflare Tunnel
 
-- Hostname: el dominio definitivo.
-- Service URL: `http://localhost:8000`.
-
-En CMD o PowerShell como administrador instale el servicio con el comando que muestra Cloudflare:
-
-```powershell
-cloudflared.exe service install <TUNNEL_TOKEN>
-```
-
-El token permite ejecutar el túnel: no lo guarde en Git, documentación, capturas ni `production.env`. La guía oficial explica la [creación y publicación del túnel](https://developers.cloudflare.com/tunnel/get-started/) y el [manejo y rotación del token](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/).
-
-Verifique desde otro dispositivo:
+En el panel de Cloudflare cree un **túnel administrado remotamente**. Instale `cloudflared` como servicio de Windows usando exactamente el comando/token que el panel le muestra para ese túnel. Configure una **ruta de aplicación publicada** con el hostname definitivo y Service URL `http://localhost:8000`. Espere a que el túnel indique conexión y compruebe desde otro dispositivo:
 
 ```text
 https://predios.entidad.gov.co/health
 https://predios.entidad.gov.co/ready
 ```
 
-Luego pruebe inicio de sesión, creación manual e importación de una persona de ensayo, generación y verificación de teselas, descarga del enlace listo, apertura pública, envío y descarga de la última versión.
+Use su dominio real. El token del túnel es secreto: no lo guarde en Git, `production.env`, capturas ni documentación. Cloudflare publica el hostname para cualquiera que conozca el enlace; si requiere restringir el panel de administración, diseñe esa política sin bloquear las rutas públicas `/p/...` y las teselas de cada persona. Consulte la [guía oficial del túnel remoto](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/).
 
-## 5. Actualizaciones posteriores
+Pruebe desde un celular externo: apertura del enlace, visualización de la ortofoto, dibujo, envío, pantalla de recibido y descarga de la última versión desde el panel. No comparta enlaces reales hasta que la imagen de cada persona figure como **LISTO**.
 
-Primero publique una etiqueta nueva desde desarrollo. En el PC de producción, abra PowerShell como administrador:
+## 5. ¿Se deben mover datos del PC de pruebas?
+
+**Instalación nueva (recomendada):** no copie la base de desarrollo ni su contraseña. Importe el Excel/CSV real o cree personas en producción y genere/verifique las teselas allí. Los enlaces de prueba no son los enlaces definitivos.
+
+**Continuar datos/enlaces existentes:** no copie solo `predios.db`. Se requiere una copia consistente de la base, los directorios operativos y la **misma** `PREDIOS_SECRET_KEY`, con sus rutas de ortofotos adaptadas al nuevo equipo. Haga esto como migración supervisada y verificada en una copia de ensayo antes de abrir el servicio público. Consulte [respaldo y recuperación](OPERACION_PRODUCCION.md). El instalador de primera vez no migra automáticamente datos del PC de desarrollo.
+
+## 6. Actualizaciones posteriores
+
+Cuando se publique una **nueva** etiqueta, en PowerShell como administrador:
 
 ```powershell
-Set-Location C:\PrediosRemotos\app
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.3
+Set-Location D:\PrediosRemotos\app
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.4
 ```
 
-Si la instalación proviene de una versión anterior a `v0.3.2`, confirme antes del arranque que `production.env` contenga `PREDIOS_WINDOW_RADIUS_M=600`. Las ventanas creadas con otro radio se marcarán pendientes y el trabajador las regenerará; los archivos ráster originales permanecen en solo lectura.
+`v0.3.4` es solo un ejemplo de etiqueta futura: use la que realmente esté publicada. El actualizador exige un checkout limpio, crea y verifica un respaldo completo, cambia el código, aplica migraciones, reinicia y valida `/health` y `/ready`. Conserve copias de seguridad también fuera de `D:`; un fallo físico de ese disco puede afectar app y datos a la vez.
 
-El actualizador exige un checkout limpio, crea y verifica un respaldo completo, detiene web y trabajador, instala la etiqueta, aplica migraciones, reinicia y valida `/health` y `/ready`. Si falla, restaura juntos el commit y el respaldo.
+## Lista de salida
 
-## 6. Eliminación de personas
-
-La eliminación desde el panel es permanente para los datos activos:
-
-- elimina persona, enlace público, versiones de dibujo, teselas y trabajos;
-- elimina el archivo de importación asociado;
-- invalida y borra las exportaciones generadas, incluido Shapefile;
-- impide que la persona vuelva a aparecer en enlaces y reportes futuros.
-
-Los respaldos históricos no se reescriben. Esto permite recuperar una eliminación accidental y evita destruir la cadena de recuperación. Proteja y rote esos respaldos según la política de retención de la entidad.
-
-## Lista final antes de anunciar el servicio
-
-- [ ] `/health` responde `ok` local y públicamente.
-- [ ] `/ready` responde `ready` local y públicamente.
-- [ ] `production.env` está fuera de Git y usa `PREDIOS_ENV=production`.
-- [ ] `PREDIOS_PUBLIC_BASE_URL` coincide con el dominio HTTPS.
-- [ ] `PREDIOS_COOKIE_SECURE=true` y `PREDIOS_ASSET_MODE=local`.
-- [ ] Las tareas Web y Worker arrancan después de reiniciar Windows.
-- [ ] Cloudflare Tunnel aparece conectado.
-- [ ] Se hizo una copia de seguridad y una restauración de ensayo.
-- [ ] Se probó un flujo completo con datos de ensayo.
+- [ ] Ortofotos originales presentes en `D:\PrediosRemotos\ortofotos` y municipios visibles en el catálogo.
+- [ ] `D:\PrediosRemotos\datos\config\production.env` fuera de Git y respaldado de forma segura.
+- [ ] `/health` y `/ready` correctos local y públicamente, incluso tras reiniciar.
+- [ ] Las tareas Web y Worker activas; túnel conectado.
+- [ ] Una persona de prueba ve imagen, puede enviar y produce exportación de última versión.
+- [ ] Respaldo probado y custodiado fuera del disco `D:`.

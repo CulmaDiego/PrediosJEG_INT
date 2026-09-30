@@ -4,11 +4,13 @@
 
 Cada actualización crea una carpeta `backups\antes-<versión>-<fecha>` con la base copiada mediante la API de respaldo en línea de SQLite, el manifiesto y los datos operativos. El script ejecuta automáticamente `PRAGMA integrity_check` sobre la copia.
 
+Esta copia **no incluye** las ortofotos originales ni `datos\config\production.env`. Respalde ambos por separado y fuera del disco `D:`. La clave `PREDIOS_SECRET_KEY` de ese archivo es imprescindible para mantener los enlaces existentes.
+
 Puede repetir la verificación sin detener la aplicación:
 
 ```powershell
 .\scripts\Cargar-Entorno.ps1 -Path 'D:\PrediosRemotos\datos\config\production.env'
-.\.venv\Scripts\python.exe -m app.cli verify-backup --source 'D:\PrediosRemotos\datos\backups\antes-v0.3.2-AAAAMMDD-HHMMSS'
+.\.venv\Scripts\python.exe -m app.cli verify-backup --source 'D:\PrediosRemotos\datos\backups\antes-v0.3.3-AAAAMMDD-HHMMSS'
 ```
 
 Además, compruebe periódicamente que la carpeta contenga `manifest.json`, `predios.db` y las carpetas de teselas/importaciones/exportaciones esperadas. Haga una restauración de ensayo en otro directorio y nunca sobre producción activa.
@@ -29,7 +31,7 @@ schtasks /End /TN 'PrediosRemotos-Web'
 schtasks /End /TN 'PrediosRemotos-Worker'
 git checkout --detach <commit-anterior>
 .\.venv\Scripts\python.exe -m app.cli restore-backup `
-  --source 'D:\PrediosRemotos\datos\backups\antes-v0.3.2-AAAAMMDD-HHMMSS' `
+  --source 'D:\PrediosRemotos\datos\backups\antes-v0.3.3-AAAAMMDD-HHMMSS' `
   --confirm RESTAURAR_RESPALDO_COMPLETO
 schtasks /Run /TN 'PrediosRemotos-Worker'
 schtasks /Run /TN 'PrediosRemotos-Web'

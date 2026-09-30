@@ -53,10 +53,10 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
 ```powershell
 .\INSTALAR_PROD.ps1 `
   -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG.git' `
-  -InstallDir 'C:\PrediosRemotos\app' `
+  -InstallDir 'D:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.3.2'
+  -Version 'v0.3.3'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -70,10 +70,10 @@ Después instale `cloudflared`, cree un túnel hacia `http://127.0.0.1:8000` y g
 
 ## Actualizar producción a una versión elegida
 
-En el PC de empresa, dentro de `C:\PrediosRemotos\app`:
+En el PC de empresa, dentro de `D:\PrediosRemotos\app`:
 
 ```powershell
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.2
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.4
 ```
 
 El script exige un checkout limpio y una etiqueta existente; crea y verifica un respaldo consistente, detiene servicios, instala esa versión, migra la base, reinicia y comprueba `/health` y `/ready`. Si algo falla, detiene procesos y restaura el commit y el respaldo completo.
@@ -90,13 +90,7 @@ Desde **Personas → Informe de seguimiento** se descarga un Excel con resumen d
 
 La interfaz administrativa y el flujo público incorporan la identidad visual de **Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración**. El isotipo se presenta sin deformación junto al nombre legible en escritorio, celular, acceso administrativo y mensajes públicos. En el mapa, el usuario puede alejarse hasta encuadrar completo el radio permitido y acercarse hasta el nivel 24.
 
-La interfaz fija Leaflet 1.9.4 y Leaflet-Geoman 2.18.3. En producción ejecute una vez:
-
-```powershell
-.\scripts\DESCARGAR_FRONTEND.ps1
-```
-
-y configure `PREDIOS_ASSET_MODE=local`; así no depende del CDN. El inventario real está en [docs/ORTOFOTOS.md](docs/ORTOFOTOS.md).
+La interfaz fija Leaflet 1.9.4 y Leaflet-Geoman 2.18.3. Ambos ya están incluidos en el repositorio; el instalador configura `PREDIOS_ASSET_MODE=local`, sin depender del CDN. El inventario real está en [docs/ORTOFOTOS.md](docs/ORTOFOTOS.md).
 
 ## Seguridad y alcance
 

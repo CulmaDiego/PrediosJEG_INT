@@ -1,57 +1,149 @@
 param(
     [string]$RepoUrl = 'https://github.com/CulmaDiego/PrediosJEG.git',
-    [string]$InstallDir = 'C:\PrediosRemotos\app',
+    [string]$InstallDir = 'D:\PrediosRemotos\app',
     [string]$DataDir = 'D:\PrediosRemotos\datos',
     [string]$OrthoDir = 'D:\PrediosRemotos\ortofotos',
-    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.3.2'
+    [string]$QgisRoot = 'C:\Program Files\QGIS 3.44.3',
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.3.3'
 )
 $ErrorActionPreference = 'Stop'
+
+function Assert-NativeSuccess([string]$Step) {
+    if ($LASTEXITCODE -ne 0) { throw "$Step falló (código $LASTEXITCODE)." }
+}
+
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Abra PowerShell como administrador.'
+}
+foreach ($path in @($InstallDir, $DataDir, $OrthoDir)) {
+    $root = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($path))
+    if (-not (Test-Path -LiteralPath $root)) { throw "El disco de $path no está disponible: $root" }
+    $drive = [IO.DriveInfo]::new($root)
+    if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) {
+        throw "Use un disco local fijo para $path; no una unidad de red o extraíble."
+    }
+}
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Instale Git para Windows.' }
-if (-not (Test-Path -LiteralPath 'C:\Program Files\QGIS 3.44.3\bin\gdalinfo.exe')) { throw 'Instale QGIS 3.44.3 con GDAL y el controlador ECW.' }
-if (-not (Test-Path -LiteralPath $InstallDir)) { git clone $RepoUrl $InstallDir }
+if (-not (Test-Path -LiteralPath (Join-Path $QgisRoot 'bin\gdalinfo.exe') -PathType Leaf)) {
+    throw "No se encontró GDAL en $QgisRoot. Instale QGIS 3.44.3 y compruebe el controlador ECW."
+}
+if (-not (Test-Path -LiteralPath $OrthoDir -PathType Container)) {
+    throw "Copie primero las ortofotos a $OrthoDir, conservando las carpetas de municipio."
+}
+$orthos = @(Get-ChildItem -LiteralPath $OrthoDir -Recurse -File | Where-Object { $_.Extension -in @('.ecw', '.tif', '.tiff') })
+if ($orthos.Count -eq 0) { throw "No hay archivos ECW/TIFF en $OrthoDir. No se instalará un catálogo vacío." }
+$gdalinfo = Join-Path $QgisRoot 'bin\gdalinfo.exe'
+if (@($orthos | Where-Object { $_.Extension -eq '.ecw' }).Count -gt 0) {
+    $formats = & $gdalinfo --formats
+    Assert-NativeSuccess 'Consultar controladores GDAL'
+    if (-not ($formats | Select-String -Pattern '^\s*ECW\s')) { throw 'GDAL no tiene el controlador ECW requerido por estas ortofotos.' }
+}
+foreach ($ortho in $orthos) {
+    & $gdalinfo $ortho.FullName | Out-Null
+    Assert-NativeSuccess "Leer la ortofoto $($ortho.FullName)"
+}
+
+if (-not (Test-Path -LiteralPath $InstallDir)) {
+    git clone $RepoUrl $InstallDir
+    Assert-NativeSuccess 'Clonar el repositorio'
+}
 $resolvedInstall = (Resolve-Path -LiteralPath $InstallDir).Path
+if (-not (Test-Path -LiteralPath (Join-Path $resolvedInstall '.git'))) { throw "$resolvedInstall no es un checkout Git." }
 Set-Location -LiteralPath $resolvedInstall
-if (git status --porcelain) { throw 'El checkout de instalación contiene cambios locales. Deténgase y revíselos.' }
+$origin = (git remote get-url origin).Trim()
+Assert-NativeSuccess 'Leer el origen Git'
+if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG(\.git)?$') { throw "El origen Git no es el esperado: $origin" }
+$changes = git status --porcelain
+Assert-NativeSuccess 'Comprobar el checkout'
+if ($changes) { throw 'El checkout de instalación contiene cambios locales. Deténgase y revíselos.' }
 git fetch --tags --prune origin
-git rev-parse --verify "refs/tags/$Version" 2>$null
+Assert-NativeSuccess 'Descargar etiquetas'
+git rev-parse --verify "refs/tags/$Version" 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "La etiqueta $Version no existe en GitHub." }
 git checkout --detach $Version
-New-Item -ItemType Directory -Force -Path $DataDir,$OrthoDir,(Join-Path $DataDir 'config'),(Join-Path $DataDir 'logs'),(Join-Path $DataDir 'backups') | Out-Null
+Assert-NativeSuccess "Seleccionar $Version"
+
+foreach ($asset in @('leaflet\leaflet.css', 'leaflet\leaflet.js', 'geoman\leaflet-geoman.css', 'geoman\leaflet-geoman.min.js')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $resolvedInstall "app\static\vendor\$asset") -PathType Leaf)) {
+        throw "Falta el recurso web local $asset en $Version."
+    }
+}
+New-Item -ItemType Directory -Force -Path $DataDir,(Join-Path $DataDir 'config'),(Join-Path $DataDir 'logs'),(Join-Path $DataDir 'backups') | Out-Null
 $envFile = Join-Path $DataDir 'config\production.env'
 if (-not (Test-Path -LiteralPath $envFile)) {
+    $publicUrl = (Read-Host 'URL pública HTTPS definitiva, por ejemplo https://predios.entidad.gov.co').Trim().TrimEnd('/')
+    $uri = $null
+    if (-not [Uri]::TryCreate($publicUrl, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or
+        $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment -or $uri.UserInfo) {
+        throw 'La URL debe ser un dominio HTTPS sin ruta, parámetros ni credenciales.'
+    }
     $bytes = New-Object byte[] 48
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     $secret = [Convert]::ToBase64String($bytes)
-    $publicUrl = Read-Host 'URL pública HTTPS que usará Cloudflare Tunnel'
-    $lines = @('PREDIOS_ENV=production',"PREDIOS_DATA_DIR=$DataDir","PREDIOS_ORTHOPHOTO_ROOT=$OrthoDir","PREDIOS_SECRET_KEY=$secret","PREDIOS_PUBLIC_BASE_URL=$publicUrl",'PREDIOS_COOKIE_SECURE=true','PREDIOS_QGIS_ROOT=C:\Program Files\QGIS 3.44.3','PREDIOS_ASSET_MODE=local','PREDIOS_WINDOW_RADIUS_M=600')
+    $lines = @('PREDIOS_ENV=production',"PREDIOS_DATA_DIR=$DataDir","PREDIOS_ORTHOPHOTO_ROOT=$OrthoDir","PREDIOS_SECRET_KEY=$secret","PREDIOS_PUBLIC_BASE_URL=$publicUrl",'PREDIOS_COOKIE_SECURE=true',"PREDIOS_QGIS_ROOT=$QgisRoot",'PREDIOS_ASSET_MODE=local','PREDIOS_WINDOW_RADIUS_M=600')
     [IO.File]::WriteAllLines($envFile, $lines)
 }
 . (Join-Path $resolvedInstall 'scripts\Cargar-Entorno.ps1') -Path $envFile
+if ($env:PREDIOS_ENV -ne 'production') { throw "$envFile no está configurado para producción." }
+if ($env:PREDIOS_DATA_DIR -ne $DataDir -or $env:PREDIOS_ORTHOPHOTO_ROOT -ne $OrthoDir) {
+    throw "Las rutas de $envFile no coinciden con los parámetros de instalación. Revise el archivo antes de continuar."
+}
 $bootstrap = $null
 if (Get-Command py -ErrorAction SilentlyContinue) {
     $candidate = & py -3.12 -c 'import sys; print(sys.executable)' 2>$null
-    if ($LASTEXITCODE -eq 0) { $bootstrap = $candidate }
+    if ($LASTEXITCODE -eq 0) { $bootstrap = ($candidate | Select-Object -First 1).Trim() }
 }
 if (-not $bootstrap) { throw 'Instale Python 3.12 de 64 bits antes de continuar.' }
 $python = Join-Path $resolvedInstall '.venv\Scripts\python.exe'
-if (-not (Test-Path -LiteralPath $python)) { & $bootstrap -m venv (Join-Path $resolvedInstall '.venv') }
+if (-not (Test-Path -LiteralPath $python)) {
+    & $bootstrap -m venv (Join-Path $resolvedInstall '.venv')
+    Assert-NativeSuccess 'Crear el entorno Python'
+}
 & $python -m pip install -r (Join-Path $resolvedInstall 'requirements.lock')
-& (Join-Path $resolvedInstall 'scripts\DESCARGAR_FRONTEND.ps1')
+Assert-NativeSuccess 'Instalar dependencias'
 & $python -m alembic -c (Join-Path $resolvedInstall 'alembic.ini') upgrade head
+Assert-NativeSuccess 'Migrar la base de datos'
 & $python -m app.cli has-admin
-if ($LASTEXITCODE -ne 0) {
+if ($LASTEXITCODE -eq 1) {
     $secure = Read-Host 'Contraseña inicial del administrador (mínimo 12 caracteres)' -AsSecureString
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try { $env:ADMIN_INITIAL_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
-    & $python -m app.cli init-admin --username admin
-    Remove-Item Env:ADMIN_INITIAL_PASSWORD -ErrorAction SilentlyContinue
-}
+    try {
+        $env:ADMIN_INITIAL_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        & $python -m app.cli init-admin --username admin
+        Assert-NativeSuccess 'Crear el administrador'
+    } finally {
+        Remove-Item Env:ADMIN_INITIAL_PASSWORD -ErrorAction SilentlyContinue
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    }
+} else { Assert-NativeSuccess 'Comprobar el administrador' }
+
 $webScript = Join-Path $resolvedInstall 'scripts\RUN_WEB.ps1'
 $workerScript = Join-Path $resolvedInstall 'scripts\RUN_WORKER.ps1'
 schtasks /Create /TN 'PrediosRemotos-Web' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$webScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
+Assert-NativeSuccess 'Registrar la tarea web'
 schtasks /Create /TN 'PrediosRemotos-Worker' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
+Assert-NativeSuccess 'Registrar la tarea del trabajador'
 schtasks /Run /TN 'PrediosRemotos-Web'
+Assert-NativeSuccess 'Iniciar la tarea web'
 schtasks /Run /TN 'PrediosRemotos-Worker'
-Write-Host 'Aplicación local instalada. Verifique http://127.0.0.1:8000/health.' -ForegroundColor Green
-Write-Host 'Instale cloudflared y cree un túnel hacia http://127.0.0.1:8000. Guarde su token en el servicio de Windows de cloudflared, nunca en este repositorio.' -ForegroundColor Yellow
+Assert-NativeSuccess 'Iniciar la tarea del trabajador'
+$verified = $false
+for ($attempt = 0; $attempt -lt 15; $attempt++) {
+    Start-Sleep -Seconds 2
+    try {
+        $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 3
+        $ready = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/ready' -TimeoutSec 3
+        if ($health.status -eq 'ok' -and $health.version -eq $Version.TrimStart('v') -and $ready.status -eq 'ready') {
+            $verified = $true
+            break
+        }
+    } catch { Start-Sleep -Milliseconds 200 }
+}
+if (-not $verified) { throw 'Las tareas se registraron, pero /health o /ready no respondió correctamente. Revise el Visor de eventos antes de publicar el túnel.' }
+$tasks = @(Get-ScheduledTask -TaskName 'PrediosRemotos-Web','PrediosRemotos-Worker')
+if ($tasks.Count -ne 2 -or @($tasks | Where-Object { $_.State -ne 'Running' }).Count -gt 0) {
+    throw 'La web responde, pero una tarea no sigue en ejecución. Revise PrediosRemotos-Web y PrediosRemotos-Worker antes de publicar.'
+}
+Write-Host "Predios Remotos $Version instalado y verificado en http://127.0.0.1:8000." -ForegroundColor Green
+Write-Host 'Configure Cloudflare Tunnel hacia http://127.0.0.1:8000. Nunca guarde el token en Git.' -ForegroundColor Yellow
