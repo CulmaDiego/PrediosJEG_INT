@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Ingresar · Predios Remotos{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block body %}
+<main class="login-wrap">
+  <section class="login-card">
+    <div class="brand login-brand"><span class="brand-mark">PR</span><span>Predios <strong>Remotos</strong></span></div>
+    <p class="eyebrow">Acceso administrativo</p>
+    <h1>Ingrese al panel</h1>
+    <p class="muted">Use la cuenta única configurada para este servidor.</p>
+    {% if error %}<div class="alert danger" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/login" class="stack-form">
+      <input type="hidden" name="next" value="{{ request.query_params.get('next', '') }}">
+      <label>Usuario<input name="username" autocomplete="username" required autofocus></label>
+      <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="button primary full" type="submit">Ingresar</button>
+    </form>
+  </section>
+</main>
+{% endblock %}
+

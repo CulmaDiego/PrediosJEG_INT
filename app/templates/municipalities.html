@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Municipios · Predios Remotos{% endblock %}
+{% block content %}
+<div class="page-head"><div><p class="eyebrow">Organización territorial</p><h1>Municipios</h1></div></div>
+<div class="split-grid wide-left">
+  <section class="panel">
+    <div class="panel-head"><h2>Municipios registrados</h2></div>
+    <div class="card-list">
+      {% for municipality in municipalities %}
+      <form method="post" action="/admin/municipios/{{ municipality.id }}" class="edit-card">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+        <label>Nombre<input name="name" value="{{ municipality.name }}" required maxlength="120"></label>
+        <label class="switch"><input type="checkbox" name="active" {% if municipality.active %}checked{% endif %}><span>Activo</span></label>
+        <a class="button ghost" href="/admin/personas?municipality_id={{ municipality.id }}">Ver personas</a>
+        <button class="button secondary" type="submit">Guardar</button>
+        <button class="button ghost" type="submit" formmethod="post" formaction="/admin/municipios/{{ municipality.id }}/enlaces" data-confirm="Esto revocará todos los enlaces anteriores del municipio y descargará enlaces nuevos. ¿Desea continuar?">Regenerar enlaces</button>
+      </form>
+      {% else %}<p class="empty">Cree el primer municipio.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="panel compact-panel">
+    <div class="panel-head"><h2>Nuevo municipio</h2></div>
+    <form method="post" action="/admin/municipios" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <label>Nombre<input name="name" required maxlength="120" placeholder="Ej. San Rafael"></label>
+      <button class="button primary" type="submit">Crear municipio</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+name: Calidad
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.lock pip-audit==2.9.0 ruff==0.13.2
+      - run: ruff check app tests
+      - run: python -m pytest -q --ignore=tests/e2e
+      - run: pip-audit -r requirements.lock
+

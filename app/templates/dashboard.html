@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Resumen · Predios Remotos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><p class="eyebrow">Seguimiento general</p><h1>Resumen</h1></div>
+  <form class="inline-filter" method="get">
+    <label>Municipio<select name="municipality_id" onchange="this.form.submit()"><option value="">Todos</option>{% for municipality in municipalities %}<option value="{{ municipality.id }}" {% if selected_municipality == municipality.id %}selected{% endif %}>{{ municipality.name }}</option>{% endfor %}</select></label>
+  </form>
+</div>
+<section class="metric-grid" aria-label="Indicadores">
+  <article class="metric hero-metric"><span>Respuesta</span><strong>{{ counts.rate }}%</strong><small>{{ counts.responded }} de {{ counts.total }} personas</small></article>
+  <article class="metric"><span>Total</span><strong>{{ counts.total }}</strong><small>personas activas</small></article>
+  <article class="metric"><span>Abrieron</span><strong>{{ counts.opened }}</strong><small>sin respuesta todavía</small></article>
+  <article class="metric"><span>Sin ortofoto</span><strong>{{ counts.without_photo }}</strong><small>requieren revisión</small></article>
+  <article class="metric"><span>Errores</span><strong>{{ counts.errors }}</strong><small>requieren atención</small></article>
+</section>
+<div class="split-grid">
+  <section class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Acciones</p><h2>Flujo de trabajo</h2></div></div>
+    <div class="action-list">
+      <a href="/admin/importar"><strong>Importar personas</strong><span>Validar Excel o CSV antes de guardar</span></a>
+      <a href="/admin/personas"><strong>Revisar estados</strong><span>Buscar pendientes, aperturas y respuestas</span></a>
+      <a href="/admin/ortofotos"><strong>Preparar ortofotos</strong><span>Catalogar fuentes y revisar trabajos</span></a>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><p class="eyebrow">Proceso local</p><h2>Trabajos recientes</h2></div></div>
+    {% if jobs %}<div class="job-list">{% for job in jobs %}<div><span class="status status-{{ job.status|lower }}">{{ job.status }}</span><strong>{{ job.job_type }}</strong><progress value="{{ job.progress }}" max="100">{{ job.progress }}%</progress>{% if job.error %}<small class="error-text">{{ job.error }}</small>{% endif %}</div>{% endfor %}</div>{% else %}<p class="empty">Todavía no hay trabajos.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
+

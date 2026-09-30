@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Gestión municipal de predios sobre ortofotos">
+  <title>{% block title %}Predios Remotos{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}admin-shell{% endblock %}">
+  {% block body %}
+  <aside class="sidebar">
+    <a class="brand" href="/admin" aria-label="Predios Remotos, inicio">
+      <span class="brand-mark" aria-hidden="true">PR</span>
+      <span>Predios<br><strong>Remotos</strong></span>
+    </a>
+    <nav aria-label="Navegación principal">
+      <a href="/admin">Resumen</a>
+      <a href="/admin/municipios">Municipios</a>
+      <a href="/admin/personas">Personas</a>
+      <a href="/admin/importar">Importar</a>
+      <a href="/admin/ortofotos">Ortofotos</a>
+    </nav>
+    <form method="post" action="/admin/logout" class="logout-form">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <button class="link-button" type="submit">Cerrar sesión</button>
+    </form>
+  </aside>
+  <main class="admin-main">
+    <header class="mobile-topbar">
+      <a class="brand compact" href="/admin"><span class="brand-mark">PR</span><strong>Predios Remotos</strong></a>
+      <details>
+        <summary aria-label="Abrir menú">Menú</summary>
+        <nav>
+          <a href="/admin">Resumen</a><a href="/admin/municipios">Municipios</a><a href="/admin/personas">Personas</a><a href="/admin/importar">Importar</a><a href="/admin/ortofotos">Ortofotos</a>
+        </nav>
+      </details>
+    </header>
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/admin.js"></script>
+  {% endblock %}
+</body>
+</html>
