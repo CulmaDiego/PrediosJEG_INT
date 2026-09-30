@@ -54,8 +54,10 @@
   let freehand = false;
   let drawing = false;
   let freePoints = [];
+  let freehandHalo = null;
   let freehandLine = null;
   let freehandStart = null;
+  let freehandCursor = null;
   let leftStart = false;
   const freehandClosePixels = 22;
   const freehandLeavePixels = 40;
@@ -68,6 +70,34 @@
     toast.className = `toast show ${kind}`;
     window.setTimeout(() => toast.className = 'toast', 3500);
   };
+  const simplifyLatLngs = points => {
+    if (points.length <= 12) return points;
+    const projected = points.map(point => map.latLngToContainerPoint(point));
+    let tolerance = 5;
+    let simplified = L.LineUtil.simplify(projected, tolerance);
+    while (simplified.length > 12 && tolerance < 25) {
+      tolerance += 2;
+      simplified = L.LineUtil.simplify(projected, tolerance);
+    }
+    if (simplified.length > 12) {
+      const step = Math.ceil(simplified.length / 12);
+      simplified = simplified.filter((_, index) => index % step === 0 || index === simplified.length - 1);
+    }
+    return simplified.map(point => map.containerPointToLatLng(point));
+  };
+  const simplifyGeometry = geometry => {
+    if (!geometry || geometry.type !== 'Polygon' || !geometry.coordinates?.[0]) return geometry;
+    const ring = geometry.coordinates[0];
+    const openRing = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+      ? ring.slice(0, -1)
+      : ring.slice();
+    if (openRing.length <= 12) return geometry;
+    const simplified = simplifyLatLngs(openRing.map(([lng, latitude]) => L.latLng(latitude, lng)));
+    if (simplified.length < 3) return geometry;
+    const coordinates = simplified.map(point => [point.lng, point.lat]);
+    coordinates.push(coordinates[0]);
+    return { type: 'Polygon', coordinates: [coordinates] };
+  };
   const snapshot = () => {
     if (!activeLayer) return;
     const geometry = activeLayer.toGeoJSON().geometry;
@@ -78,8 +108,9 @@
     undoButton.disabled = history.length < 2;
   };
   const setLayer = (geometry, save = true) => {
+    const normalizedGeometry = simplifyGeometry(geometry);
     if (activeLayer) map.removeLayer(activeLayer);
-    activeLayer = L.geoJSON(geometry, { style: { color: '#44bec6', weight: 4, fill: false } }).getLayers()[0];
+    activeLayer = L.geoJSON(normalizedGeometry, { style: { color: '#44bec6', weight: 4, fill: false } }).getLayers()[0];
     activeLayer.addTo(map);
     activeLayer.on('pm:edit', snapshot);
     if (save) snapshot();
@@ -100,7 +131,7 @@
     map.dragging.enable();
     if (name === 'polygon') map.pm.enableDraw('Polygon', { snappable: false, finishOn: 'dblclick', pathOptions: { color: '#44bec6', fill: false, weight: 4 } });
     if (name === 'freehand') { freehand = true; map.dragging.disable(); notify('Siga el borde y vuelva al punto inicial para cerrar'); }
-    if (name === 'edit' && activeLayer) { activeLayer.pm.enable({ snappable: false }); notify('Arrastre los puntos para corregir'); }
+    if (name === 'edit' && activeLayer) { activeLayer.pm.enable({ snappable: false, hideMiddleMarkers: true }); notify('Arrastre los puntos grandes para corregir'); }
     if (name === 'delete') {
       if (activeLayer) map.removeLayer(activeLayer);
       activeLayer = null; history = []; sessionStorage.removeItem(draftKey);
@@ -116,31 +147,24 @@
     return map.containerPointToLatLng(L.point(event.clientX - rect.left, event.clientY - rect.top));
   };
   const clearFreehandGuide = () => {
+    if (freehandHalo) map.removeLayer(freehandHalo);
     if (freehandLine) map.removeLayer(freehandLine);
     if (freehandStart) map.removeLayer(freehandStart);
+    if (freehandCursor) map.removeLayer(freehandCursor);
+    freehandHalo = null;
     freehandLine = null;
     freehandStart = null;
+    freehandCursor = null;
   };
   const simplifyFreehand = points => {
-    const projected = points.map(point => map.latLngToContainerPoint(point));
-    let tolerance = 5;
-    let simplified = L.LineUtil.simplify(projected, tolerance);
-    while (simplified.length > 40 && tolerance < 17) {
-      tolerance += 2;
-      simplified = L.LineUtil.simplify(projected, tolerance);
-    }
-    if (simplified.length > 40) {
-      const step = Math.ceil(simplified.length / 40);
-      simplified = simplified.filter((_, index) => index % step === 0 || index === simplified.length - 1);
-    }
-    if (simplified.length > 3 && simplified[0].distanceTo(simplified[simplified.length - 1]) <= freehandClosePixels) simplified.pop();
-    return simplified.map(point => map.containerPointToLatLng(point));
+    const simplified = simplifyLatLngs(points);
+    if (simplified.length > 3 && map.latLngToContainerPoint(simplified[0]).distanceTo(map.latLngToContainerPoint(simplified[simplified.length - 1])) <= freehandClosePixels) simplified.pop();
+    return simplified;
   };
   const finishFreehand = (event, closedAtStart = false) => {
     if (!drawing) return;
     drawing = false;
     if (mapNode.hasPointerCapture(event.pointerId)) mapNode.releasePointerCapture(event.pointerId);
-    const originalCount = freePoints.length;
     const simplified = simplifyFreehand(freePoints);
     clearFreehandGuide();
     if (simplified.length < 3) {
@@ -151,9 +175,9 @@
     const coordinates = simplified.map(point => [point.lng, point.lat]);
     coordinates.push(coordinates[0]);
     setLayer({ type: 'Polygon', coordinates: [coordinates] });
-    setTool('edit');
+    setTool('move');
     const closeMessage = closedAtStart ? 'Contorno cerrado' : 'Contorno terminado';
-    notify(`${closeMessage}: ${originalCount} puntos reducidos a ${simplified.length}`);
+    notify(`${closeMessage}: ${simplified.length} puntos. Pulse Editar para corregir.`);
     freePoints = [];
   };
   mapNode.addEventListener('pointerdown', event => {
@@ -163,8 +187,10 @@
     drawing = true;
     leftStart = false;
     freePoints = [pointFromEvent(event)];
-    freehandLine = L.polyline(freePoints, { color: '#44bec6', weight: 5, opacity: 1, interactive: false }).addTo(map);
-    freehandStart = L.circleMarker(freePoints[0], { radius: 7, color: '#162f3e', weight: 3, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(map);
+    freehandHalo = L.polyline(freePoints, { color: '#fff', weight: 11, opacity: 0.95, className: 'freehand-guide-halo', interactive: false }).addTo(map);
+    freehandLine = L.polyline(freePoints, { color: '#096e74', weight: 6, opacity: 1, className: 'freehand-guide', interactive: false }).addTo(map);
+    freehandStart = L.circleMarker(freePoints[0], { radius: 10, color: '#162f3e', weight: 4, fillColor: '#44bec6', fillOpacity: 1, className: 'freehand-start', interactive: false }).addTo(map);
+    freehandCursor = L.circleMarker(freePoints[0], { radius: 7, color: '#fff', weight: 3, fillColor: '#096e74', fillOpacity: 1, className: 'freehand-cursor', interactive: false }).addTo(map);
     mapNode.setPointerCapture(event.pointerId);
   });
   mapNode.addEventListener('pointermove', event => {
@@ -174,11 +200,13 @@
     const pointPixel = map.latLngToContainerPoint(point);
     if (pointPixel.distanceTo(map.latLngToContainerPoint(previous)) < 4) return;
     freePoints.push(point);
+    freehandHalo.setLatLngs(freePoints);
     freehandLine.setLatLngs(freePoints);
+    freehandCursor.setLatLng(point);
     const startDistance = pointPixel.distanceTo(map.latLngToContainerPoint(freePoints[0]));
     if (!leftStart && startDistance >= freehandLeavePixels) {
       leftStart = true;
-      freehandStart.setStyle({ fillColor: '#44bec6' });
+      freehandStart.setStyle({ fillColor: '#fff' });
     }
     if (leftStart && freePoints.length >= 6 && startDistance <= freehandClosePixels) finishFreehand(event, true);
   });

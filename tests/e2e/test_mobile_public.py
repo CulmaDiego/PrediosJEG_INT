@@ -93,6 +93,18 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                 assert page.locator("#confirmButton").is_visible()
                 assert any(status == 200 for status in tile_ok)
                 if width == 375:
+                    dense_ring = [
+                        [lon + math.cos(index * math.tau / 48) * 0.0003, lat + math.sin(index * math.tau / 48) * 0.0003]
+                        for index in range(48)
+                    ]
+                    dense_ring.append(dense_ring[0])
+                    page.evaluate(
+                        "([key, geometry]) => sessionStorage.setItem(key, JSON.stringify(geometry))",
+                        [f"predios-remotos-draft-{token[:12]}", {"type": "Polygon", "coordinates": [dense_ring]}],
+                    )
+                    page.reload(wait_until="networkidle")
+                    migrated = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert 4 <= len(migrated["coordinates"][0]) <= 13
                     zoom_in = page.locator(".leaflet-control-zoom-in")
                     for expected_zoom in range(19, 25):
                         zoom_in.click()
@@ -106,14 +118,20 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.mouse.move(map_box["x"] + points[0][0], map_box["y"] + points[0][1])
                     page.mouse.down()
                     page.mouse.move(map_box["x"] + points[1][0], map_box["y"] + points[1][1], steps=16)
-                    assert page.locator('.leaflet-overlay-pane path[stroke="#44bec6"]').count() >= 1
+                    assert page.locator(".freehand-guide-halo").count() == 1
+                    assert page.locator(".freehand-guide").count() == 1
                     for px, py in points[2:]:
                         page.mouse.move(map_box["x"] + px, map_box["y"] + py, steps=16)
                     assert page.locator("#confirmButton").is_enabled()
                     page.mouse.up()
                     draft = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
-                    assert 4 <= len(draft["coordinates"][0]) <= 12
+                    assert 4 <= len(draft["coordinates"][0]) <= 13
+                    expect(page.locator('[data-tool="move"]')).to_have_class("tool active")
+                    assert page.locator(".marker-icon").count() == 0
                     page.locator('[data-tool="edit"]').click()
+                    assert page.locator(".marker-icon-middle").count() == 0
+                    assert 3 <= page.locator(".marker-icon").count() <= 12
+                    assert page.locator(".marker-icon").first.bounding_box()["width"] >= 24
                     failed = {"done": False}
 
                     def fail_once(route):
