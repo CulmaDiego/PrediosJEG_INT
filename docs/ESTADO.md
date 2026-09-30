@@ -17,6 +17,7 @@ Fecha de actualización: 2026-09-30.
 - [x] Alta manual de una persona con las mismas reglas de nombre, celular y coordenadas usadas por la importación.
 - [x] Celular normalizado único, enlaces preservados al actualizar y coordenadas protegidas si hay dibujo.
 - [x] Enlace público estable por persona, visible y copiable desde el detalle; descargas XLSX masivas para todos o por municipio.
+- [x] Informe XLSX de seguimiento global o por municipio, con resumen de respuestas e imágenes y detalle por persona.
 - [x] Reinicio administrativo de la respuesta sin cambiar el enlace: elimina sus versiones y devuelve el estado a pendiente.
 - [x] Tablero, filtros, estados, detalle e historial.
 - Verificación: pruebas HTTP de autenticación, XSS, SQL injection y archivos inválidos.

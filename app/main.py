@@ -158,6 +158,64 @@ def _links_workbook(people: list[Person], settings: Settings) -> io.BytesIO:
     return output
 
 
+def _people_report_workbook(people: list[Person], ready_ids: set[int]) -> io.BytesIO:
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "Resumen"
+    counts = {
+        "Total de personas": len(people),
+        "Respondieron": sum(person.status == "RESPONDIO" for person in people),
+        "Abrieron sin responder": sum(person.status == "ABRIO" for person in people),
+        "Pendientes": sum(person.status == "PENDIENTE" for person in people),
+        "Imágenes verificadas": len(ready_ids),
+        "Sin ortofoto": sum(person.orthophoto_status == "SIN_ORTOFOTO" for person in people),
+        "Con error": sum(person.status == "ERROR" or person.orthophoto_status == "ERROR" for person in people),
+    }
+    summary.append(["INDICADOR", "CANTIDAD"])
+    for label, value in counts.items():
+        summary.append([label, value])
+    summary.freeze_panes = "A2"
+    summary.column_dimensions["A"].width = 28
+    summary.column_dimensions["B"].width = 14
+
+    detail = workbook.create_sheet("Personas")
+    detail.append(
+        [
+            "NOMBRE",
+            "CELULAR",
+            "MUNICIPIO",
+            "ESTADO_RESPUESTA",
+            "ESTADO_IMAGEN",
+            "LISTO_PARA_ENVIAR",
+            "ULTIMO_ACCESO",
+            "FECHA_RESPUESTA",
+            "VERSION_DIBUJO",
+        ]
+    )
+    for person in people:
+        detail.append(
+            [
+                person.name,
+                person.phone,
+                person.municipality.name,
+                person.status,
+                person.orthophoto_status,
+                "SÍ" if person.id in ready_ids else "NO",
+                person.last_opened_at.strftime("%Y-%m-%d %H:%M") if person.last_opened_at else "",
+                person.responded_at.strftime("%Y-%m-%d %H:%M") if person.responded_at else "",
+                person.drawing_version,
+            ]
+        )
+    detail.freeze_panes = "A2"
+    detail.auto_filter.ref = detail.dimensions
+    for column, width in {"A": 30, "B": 18, "C": 24, "D": 21, "E": 20, "F": 21, "G": 21, "H": 21, "I": 18}.items():
+        detail.column_dimensions[column].width = width
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output
+
+
 def _quarantine_artifacts(paths: list[Path], settings: Settings) -> tuple[Path | None, list[tuple[Path, Path]]]:
     allowed_roots = [(settings.data_dir / name).resolve() for name in ("tiles", "imports", "exports")]
     safe_paths: list[Path] = []
@@ -530,6 +588,24 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         return RedirectResponse(
             f"/admin/personas?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}",
             status_code=303,
+        )
+
+    @app.get("/admin/personas/informe.xlsx")
+    def people_report_download(request: Request, municipality_id: int | None = None, db: Session = Depends(get_db)) -> Response:
+        require_admin(request, db)
+        query = select(Person).where(Person.active.is_(True)).order_by(Person.municipality_id, Person.name)
+        if municipality_id:
+            if not db.get(Municipality, municipality_id):
+                raise HTTPException(404)
+            query = query.where(Person.municipality_id == municipality_id)
+        people = list(db.scalars(query).all())
+        ready_ids = {person.id for person in _verified_people(db, query, settings)}
+        output = _people_report_workbook(people, ready_ids)
+        suffix = f"_municipio_{municipality_id}" if municipality_id else "_todos"
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="informe_personas{suffix}.xlsx"'},
         )
 
     @app.get("/admin/personas/nueva", response_class=HTMLResponse)

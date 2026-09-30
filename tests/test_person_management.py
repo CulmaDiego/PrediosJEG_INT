@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 from sqlalchemy import func, select
 
 from app.gis import tile_xy, verify_generated_tiles
-from app.models import Job, Municipality, Person, TileWindow
+from app.models import Job, Municipality, Person, TileWindow, utcnow
 from tests.conftest import login
 
 
@@ -132,3 +132,48 @@ def test_generated_tiles_are_verified_at_reference_point(tmp_path):
     (root / "16").rename(root / "missing-16")
     with pytest.raises(RuntimeError, match="punto de referencia"):
         verify_generated_tiles(root, lon, lat, 15, 16)
+
+
+def test_people_report_summarizes_response_and_image_status(test_app):
+    app, client, _, original_id = test_app
+    with app.state.Session() as db:
+        municipality_id = db.get(Person, original_id).municipality_id
+        responded = Person(
+            municipality_id=municipality_id,
+            name="Respondió",
+            phone="3005550001",
+            status="RESPONDIO",
+            orthophoto_status="LISTO",
+            last_opened_at=utcnow(),
+            responded_at=utcnow(),
+            drawing_version=2,
+        )
+        opened = Person(municipality_id=municipality_id, name="Solo abrió", phone="3005550002", status="ABRIO", orthophoto_status="SIN_ORTOFOTO")
+        db.add_all([responded, opened])
+        db.commit()
+    login(client)
+
+    response = client.get(f"/admin/personas/informe.xlsx?municipality_id={municipality_id}")
+    assert response.status_code == 200
+    assert "informe_personas_municipio" in response.headers["content-disposition"]
+    workbook = load_workbook(io.BytesIO(response.content), read_only=True)
+    assert workbook.sheetnames == ["Resumen", "Personas"]
+    summary = dict(workbook["Resumen"].iter_rows(min_row=2, values_only=True))
+    assert summary["Total de personas"] == 3
+    assert summary["Respondieron"] == 1
+    assert summary["Abrieron sin responder"] == 1
+    assert summary["Pendientes"] == 1
+    rows = list(workbook["Personas"].iter_rows(values_only=True))
+    assert rows[0][3:] == (
+        "ESTADO_RESPUESTA",
+        "ESTADO_IMAGEN",
+        "LISTO_PARA_ENVIAR",
+        "ULTIMO_ACCESO",
+        "FECHA_RESPUESTA",
+        "VERSION_DIBUJO",
+    )
+    responded_row = next(row for row in rows[1:] if row[0] == "Respondió")
+    assert responded_row[3] == "RESPONDIO"
+    assert responded_row[4] == "LISTO"
+    assert responded_row[5] == "NO"
+    assert responded_row[8] == 2

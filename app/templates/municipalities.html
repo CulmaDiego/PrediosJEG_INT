@@ -16,6 +16,7 @@
         <a class="button ghost" href="/admin/personas?municipality_id={{ municipality.id }}">Ver personas</a>
         <button class="button secondary" type="submit">Guardar</button>
         <a class="button ghost" href="/admin/enlaces?municipality_id={{ municipality.id }}">Descargar enlaces</a>
+        <a class="button ghost" href="/admin/personas/informe.xlsx?municipality_id={{ municipality.id }}">Descargar informe</a>
         {% set person_count = people_counts.get(municipality.id, 0) %}
         <button class="button secondary" type="submit" formaction="/admin/municipios/{{ municipality.id }}/preparar-teselas" {% if not person_count %}disabled{% endif %}>Generar y verificar teselas</button>
         <button class="button danger" type="submit" formaction="/admin/municipios/{{ municipality.id }}/personas/eliminar" {% if not person_count %}disabled{% endif %} data-confirm="Esta acción es permanente. Se eliminarán las {{ person_count }} persona(s) de {{ municipality.name }}, con todos sus enlaces, dibujos, teselas y archivos derivados. El municipio no se eliminará. ¿Desea continuar?">Eliminar sus {{ person_count }} persona(s)</button>
