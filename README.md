@@ -17,7 +17,7 @@ Requisitos:
 
 - Git para Windows.
 - Python 3.12 de 64 bits.
-- QGIS 3.44.3 con GDAL. Para ECW, confirme que exista `gdal_ECW_JP2ECW.dll`.
+- QGIS 3.44.x con GDAL. El desarrollo se validó con 3.44.3; producción admite 3.44.13 indicando `-QgisRoot`. Para ECW, confirme que exista `gdal_ECW_JP2ECW.dll` y que PROJ encuentre `proj.db`.
 - Las ortofotos dentro de `Imagenes/`. La aplicación solo las lee.
 
 Abra PowerShell en el repositorio y ejecute:
@@ -56,7 +56,8 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
   -InstallDir 'D:\PrediosRemotos\app' `
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -Version 'v0.3.3'
+  -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
+  -Version 'v0.3.4'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -73,7 +74,7 @@ Después instale `cloudflared`, cree un túnel hacia `http://127.0.0.1:8000` y g
 En el PC de empresa, dentro de `D:\PrediosRemotos\app`:
 
 ```powershell
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.4
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.5
 ```
 
 El script exige un checkout limpio y una etiqueta existente; crea y verifica un respaldo consistente, detiene servicios, instala esa versión, migra la base, reinicia y comprueba `/health` y `/ready`. Si algo falla, detiene procesos y restaura el commit y el respaldo completo.

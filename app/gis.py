@@ -52,9 +52,13 @@ def validate_polygon(geometry: dict, reference_lon: float, reference_lat: float)
 def qgis_environment(settings: Settings) -> dict[str, str]:
     env = os.environ.copy()
     root = settings.qgis_root
+    proj_candidates = [root / "share" / "proj", root / "apps" / "proj" / "share" / "proj"]
+    proj_dir = next((candidate for candidate in proj_candidates if (candidate / "proj.db").is_file()), None)
+    if proj_dir is None:
+        raise FileNotFoundError(f"No se encontró proj.db dentro de {root}; compruebe la instalación de QGIS")
     env["GDAL_DATA"] = str(root / "apps" / "gdal" / "share" / "gdal")
-    env["PROJ_LIB"] = str(root / "share" / "proj")
-    env["PROJ_DATA"] = env["PROJ_LIB"]
+    env["PROJ_DATA"] = str(proj_dir)
+    env["PROJ_LIB"] = str(proj_dir)
     env["GDAL_DRIVER_PATH"] = str(root / "apps" / "gdal" / "lib" / "gdalplugins")
     env["GTIFF_SRS_SOURCE"] = "EPSG"
     env["PATH"] = f"{root / 'bin'};{env.get('PATH', '')}"
@@ -65,8 +69,11 @@ def qgis_tool(settings: Settings, name: str) -> Path:
     candidates = [
         settings.qgis_root / "bin" / f"{name}.exe",
         settings.qgis_root / "bin" / f"{name}.py",
-        settings.qgis_root / "apps" / "Python312" / "Scripts" / f"{name}.py",
     ]
+    candidates.extend(
+        python.parent / "Scripts" / f"{name}.py"
+        for python in sorted(settings.qgis_root.glob("apps/Python3*/python.exe"), reverse=True)
+    )
     for candidate in candidates:
         if candidate.exists():
             return candidate
@@ -76,7 +83,12 @@ def qgis_tool(settings: Settings, name: str) -> Path:
 def qgis_command(settings: Settings, name: str) -> list[str]:
     tool = qgis_tool(settings, name)
     if tool.suffix.lower() == ".py":
-        return [str(settings.qgis_root / "apps" / "Python312" / "python.exe"), str(tool)]
+        bundled_python = tool.parent.parent / "python.exe" if tool.parent.name == "Scripts" else None
+        if bundled_python is None or not bundled_python.is_file():
+            bundled_python = next(iter(sorted(settings.qgis_root.glob("apps/Python3*/python.exe"), reverse=True)), None)
+        if bundled_python is None:
+            raise FileNotFoundError(f"No se encontró el Python de QGIS para ejecutar {tool}")
+        return [str(bundled_python), str(tool)]
     return [str(tool)]
 
 
