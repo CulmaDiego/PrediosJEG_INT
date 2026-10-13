@@ -63,7 +63,7 @@ Invoke-RestMethod http://127.0.0.1:8000/ready
 Get-ScheduledTask -TaskName 'PrediosRemotos-*' | Select-Object TaskName,State
 ```
 
-Espere `status: ok`, `version: 0.3.4` y `status: ready`. Entre a `http://127.0.0.1:8000/admin` con `admin` y la contraseña recién creada. En **Ortofotos**, pulse **Actualizar catálogo** y confirme que aparezcan los municipios y que los rásteres sean legibles. Si no aparecen, revise las carpetas de `D:\PrediosRemotos\ortofotos`, el controlador GDAL y los mensajes del trabajador; **no distribuya enlaces todavía**. Cree una persona de prueba con coordenada dentro de una ortofoto, genere/verifique sus teselas y confirme que su enlace esté listo. Las ventanas usan **600 m de radio** alrededor del punto; el límite de vértices del polígono es una regla separada.
+Espere `status: ok`, `version: 0.3.4` y `status: ready`. Entre a `http://127.0.0.1:8000/admin` con `admin` y la contraseña recién creada. En **Ortofotos**, pulse **Actualizar catálogo** y confirme que aparezcan los municipios y que los rásteres sean legibles. Si no aparecen, revise las carpetas de `D:\PrediosRemotos\ortofotos`, el controlador GDAL y los mensajes del trabajador; **no distribuya enlaces todavía**. En **Configuración de teselas** el radio inicial es **2000 m** y puede cambiarse para las personas nuevas y futuras regeneraciones; las ventanas y los dibujos ya enviados se conservan. Cree una persona de prueba con coordenada dentro de una ortofoto, genere/verifique sus teselas y confirme que su enlace esté listo. El límite de vértices del polígono es una regla separada.
 
 Reinicie Windows una vez y repita las comprobaciones: las dos tareas deben arrancar con el disco `D:` disponible.
 

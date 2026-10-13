@@ -12,7 +12,7 @@ $repo = $PSScriptRoot
 Set-Location -LiteralPath $repo
 . (Join-Path $repo 'scripts\Cargar-Entorno.ps1') -Path $EnvFile
 if ($env:PREDIOS_ENV -ne 'production') { throw 'La configuración no corresponde a producción.' }
-if ($env:PREDIOS_WINDOW_RADIUS_M -ne '600') { throw 'Ajuste PREDIOS_WINDOW_RADIUS_M=600 en production.env antes de actualizar.' }
+if ($env:PREDIOS_WINDOW_RADIUS_M -ne '2000') { throw 'Ajuste PREDIOS_WINDOW_RADIUS_M=2000 en production.env antes de actualizar.' }
 $python = Join-Path $repo '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "No existe el entorno Python: $python" }
 $changes = git status --porcelain

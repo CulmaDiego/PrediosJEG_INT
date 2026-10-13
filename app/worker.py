@@ -17,8 +17,12 @@ from .catalog import find_municipality, raster_files, synchronize_municipalities
 from .config import Settings
 from .db import build_engine, build_session_factory
 from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_command, qgis_environment, qgis_tool, verify_generated_tiles
-from .models import Job, OrthophotoSource, Person, TileWindow, utcnow
+from .models import Job, OrthophotoSource, Person, TileConfiguration, TileWindow, utcnow
 
+
+def _tile_radius(db: Session, settings: Settings) -> int:
+    configuration = db.get(TileConfiguration, 1)
+    return configuration.radius_m if configuration else settings.window_radius_m
 
 def claim_job(db: Session, worker_id: str) -> Job | None:
     stale = utcnow() - timedelta(minutes=30)
@@ -83,7 +87,7 @@ def scan_catalog(db: Session, settings: Settings, job: Job) -> None:
         db.commit()
 
 
-def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) -> None:
+def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, radius_m: int) -> None:
     job_id = job.id
     person = db.get(Person, person_id)
     if not person or person.reference_lon is None or person.reference_lat is None:
@@ -95,7 +99,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     person.orthophoto_status = "PENDIENTE"
     person.orthophoto_error = None
     sources = db.scalars(select(OrthophotoSource).where(OrthophotoSource.municipality_id == person.municipality_id, OrthophotoSource.status == "LISTO")).all()
-    requested_bounds = metres_bounds(person.reference_lon, person.reference_lat, settings.window_radius_m)
+    requested_bounds = metres_bounds(person.reference_lon, person.reference_lat, radius_m)
     source = next((candidate for candidate in sources if candidate.bounds_json and bounds_intersect(json.loads(candidate.bounds_json), requested_bounds)), None)
     if source is None:
         window.status = "SIN_ORTOFOTO"
@@ -166,7 +170,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int) ->
     window.relative_dir = relative_dir
     window.min_zoom = settings.tile_min_zoom
     window.max_zoom = settings.tile_max_zoom
-    window.radius_m = settings.window_radius_m
+    window.radius_m = radius_m
     window.status = "LISTO"
     window.error = None
     person.orthophoto_status = "LISTO"
@@ -186,7 +190,10 @@ def execute_job(db: Session, settings: Settings, job: Job) -> None:
     if job.job_type == "SCAN_CATALOG":
         scan_catalog(db, settings, job)
     elif job.job_type == "PREPARE_WINDOW":
-        prepare_window(db, settings, job, int(payload["person_id"]))
+        radius_m = int(payload.get("radius_m", _tile_radius(db, settings)))
+        if not 100 <= radius_m <= 10_000:
+            raise RuntimeError("El radio de teselas solicitado no es válido")
+        prepare_window(db, settings, job, int(payload["person_id"]), radius_m)
     else:
         raise RuntimeError(f"Tipo de trabajo desconocido: {job.job_type}")
 

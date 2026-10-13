@@ -34,6 +34,7 @@ from .models import (
     OrthophotoSource,
     Person,
     PublicLink,
+    TileConfiguration,
     TileWindow,
     utcnow,
 )
@@ -56,6 +57,9 @@ from .security import (
 
 templates = Jinja2Templates(directory=str(REPO_ROOT / "app" / "templates"))
 
+TILE_RADIUS_MIN_M = 100
+TILE_RADIUS_MAX_M = 10_000
+
 
 def get_db(request: Request) -> Iterator[Session]:
     factory: sessionmaker[Session] = request.app.state.Session
@@ -71,6 +75,20 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     return templates.TemplateResponse(request=request, name=name, context=values, status_code=status_code)
 
 
+def _ensure_tile_configuration(db: Session, settings: Settings) -> TileConfiguration:
+    configuration = db.get(TileConfiguration, 1)
+    if configuration is None:
+        configuration = TileConfiguration(id=1, radius_m=settings.window_radius_m)
+        db.add(configuration)
+        db.flush()
+    return configuration
+
+
+def _tile_radius(db: Session, settings: Settings) -> int:
+    configuration = db.get(TileConfiguration, 1)
+    return configuration.radius_m if configuration else settings.window_radius_m
+
+
 def _job(db: Session, job_type: str, payload: dict) -> Job:
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     existing = db.scalar(
@@ -83,18 +101,22 @@ def _job(db: Session, job_type: str, payload: dict) -> Job:
     return job
 
 
-def _queue_tile_jobs(db: Session, people: list[Person]) -> dict[str, int]:
+def _queue_tile_jobs(db: Session, people: list[Person], radius_m: int) -> dict[str, int]:
     requested = 0
     without_coordinates = 0
+    preserved_drawings = 0
     for person in people:
+        if person.drawing_version:
+            preserved_drawings += 1
+            continue
         if person.reference_lon is None or person.reference_lat is None:
             without_coordinates += 1
             continue
-        _job(db, "PREPARE_WINDOW", {"person_id": person.id})
+        _job(db, "PREPARE_WINDOW", {"person_id": person.id, "radius_m": radius_m})
         person.orthophoto_status = "PENDIENTE"
         person.orthophoto_error = None
         requested += 1
-    return {"requested": requested, "without_coordinates": without_coordinates}
+    return {"requested": requested, "without_coordinates": without_coordinates, "preserved_drawings": preserved_drawings}
 
 
 def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  # type: ignore[no-untyped-def]
@@ -110,7 +132,6 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             or not window.relative_dir
             or window.min_zoom is None
             or window.max_zoom is None
-            or window.radius_m != settings.window_radius_m
         ):
             continue
         try:
@@ -340,30 +361,11 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.state.Session = build_session_factory(engine)
     if inspect(engine).has_table("municipalities"):
         with app.state.Session() as db:
+            _ensure_tile_configuration(db, settings)
             files = raster_files(settings.orthophoto_root)
             synchronize_municipalities(db, settings.orthophoto_root)
             if files and not db.scalar(select(func.count()).select_from(OrthophotoSource)):
                 _job(db, "SCAN_CATALOG", {})
-            outdated = list(
-                db.scalars(
-                    select(Person)
-                    .join(TileWindow, TileWindow.person_id == Person.id)
-                    .where(
-                        Person.active.is_(True),
-                        Person.reference_lon.is_not(None),
-                        Person.reference_lat.is_not(None),
-                        TileWindow.radius_m != settings.window_radius_m,
-                    )
-                ).all()
-            )
-            for person in outdated:
-                window = db.get(TileWindow, person.id)
-                if window:
-                    window.status = "PENDIENTE"
-                    window.error = f"Pendiente de regeneración con radio de {settings.window_radius_m} m"
-                person.orthophoto_status = "PENDIENTE"
-                person.orthophoto_error = window.error if window else None
-            _queue_tile_jobs(db, outdated)
             db.commit()
     app.mount("/static", StaticFiles(directory=str(REPO_ROOT / "app" / "static")), name="static")
 
@@ -473,6 +475,36 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         jobs = db.scalars(select(Job).order_by(Job.created_at.desc()).limit(8)).all()
         return render(request, "dashboard.html", {"admin": session.admin, "counts": counts, "municipalities": municipalities, "selected_municipality": municipality_id, "jobs": jobs})
 
+    @app.get("/admin/configuracion", response_class=HTMLResponse)
+    def tile_configuration_page(request: Request, db: Session = Depends(get_db)) -> Response:
+        session = require_admin(request, db)
+        configuration = _ensure_tile_configuration(db, settings)
+        db.commit()
+        return render(request, "tile_configuration.html", {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": TILE_RADIUS_MAX_M})
+
+    @app.post("/admin/configuracion/teselas", response_class=HTMLResponse)
+    def tile_configuration_update(
+        request: Request,
+        radius_m: int = Form(...),
+        csrf_token: str = Form(...),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        configuration = _ensure_tile_configuration(db, settings)
+        if not TILE_RADIUS_MIN_M <= radius_m <= TILE_RADIUS_MAX_M:
+            return render(
+                request,
+                "tile_configuration.html",
+                {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": TILE_RADIUS_MAX_M, "error": f"El radio debe estar entre {TILE_RADIUS_MIN_M} y {TILE_RADIUS_MAX_M} metros."},
+                422,
+            )
+        previous_radius_m = configuration.radius_m
+        configuration.radius_m = radius_m
+        _audit(db, request, "CONFIGURACION_TESELAS_ACTUALIZADA", session.admin.username, details={"radio_anterior_m": previous_radius_m, "radio_nuevo_m": radius_m})
+        db.commit()
+        return RedirectResponse("/admin/configuracion?guardado=1", status_code=303)
+
     @app.get("/admin/municipios", response_class=HTMLResponse)
     def municipalities_page(request: Request, db: Session = Depends(get_db)) -> Response:
         session = require_admin(request, db)
@@ -549,11 +581,11 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 select(Person).where(Person.municipality_id == municipality_id, Person.active.is_(True)).order_by(Person.id)
             ).all()
         )
-        result = _queue_tile_jobs(db, people)
+        result = _queue_tile_jobs(db, people, _tile_radius(db, settings))
         _audit(db, request, "TESELAS_MUNICIPIO_SOLICITADAS", session.admin.username, details={"municipality_id": municipality_id, **result})
         db.commit()
         return RedirectResponse(
-            f"/admin/municipios?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}",
+            f"/admin/municipios?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}&dibujos_conservados={result['preserved_drawings']}",
             status_code=303,
         )
 
@@ -611,11 +643,11 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         verify_csrf(request, csrf_token, session)
         selected = {person_id for person_id in person_ids or [] if person_id > 0}
         people = list(db.scalars(select(Person).where(Person.id.in_(selected), Person.active.is_(True)).order_by(Person.id)).all()) if selected else []
-        result = _queue_tile_jobs(db, people)
+        result = _queue_tile_jobs(db, people, _tile_radius(db, settings))
         _audit(db, request, "TESELAS_PERSONAS_SOLICITADAS", session.admin.username, details={"person_ids": sorted(selected), **result})
         db.commit()
         return RedirectResponse(
-            f"/admin/personas?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}",
+            f"/admin/personas?teselas_solicitadas={result['requested']}&sin_coordenadas={result['without_coordinates']}&dibujos_conservados={result['preserved_drawings']}",
             status_code=303,
         )
 
@@ -685,7 +717,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         db.add(person)
         try:
             db.flush()
-            result = _queue_tile_jobs(db, [person])
+            result = _queue_tile_jobs(db, [person], _tile_radius(db, settings))
             _audit(db, request, "PERSONA_CREADA", session.admin.username, person.id, {"municipality_id": municipality.id, **result})
             db.commit()
         except IntegrityError:
@@ -728,10 +760,10 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         person = db.get(Person, person_id)
         if not person or not person.active:
             raise HTTPException(404)
-        result = _queue_tile_jobs(db, [person])
+        result = _queue_tile_jobs(db, [person], _tile_radius(db, settings))
         _audit(db, request, "TESELAS_PERSONA_SOLICITADAS", session.admin.username, person.id, result)
         db.commit()
-        state = "solicitadas" if result["requested"] else "sin-coordenadas"
+        state = "conservada" if result["preserved_drawings"] else ("solicitadas" if result["requested"] else "sin-coordenadas")
         return RedirectResponse(f"/admin/personas/{person_id}?teselas={state}", status_code=303)
 
     @app.post("/admin/personas/{person_id}/eliminar")
@@ -825,6 +857,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if errors:
             raise HTTPException(409, "Corrija todos los errores antes de confirmar")
         rows = json.loads(batch.rows_json)
+        tile_radius_m = _tile_radius(db, settings)
         for row in rows:
             person = db.scalar(select(Person).where(Person.phone == row["phone"]))
             if person is None:
@@ -838,7 +871,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 person.reference_lon = row["reference_lon"]
                 person.reference_lat = row["reference_lat"]
             if person.reference_lon is not None and person.reference_lat is not None:
-                _job(db, "PREPARE_WINDOW", {"person_id": person.id})
+                _queue_tile_jobs(db, [person], tile_radius_m)
         batch.status = "CONFIRMADO"
         batch.confirmed_at = utcnow()
         _audit(db, request, "IMPORTACION_CONFIRMADA", session.admin.username, details={"batch_id": batch.id, "rows": len(rows)})
@@ -941,7 +974,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if person.reference_lon is None or person.reference_lat is None:
             return render(request, "public_invalid.html", {"message": "Este registro todavía no tiene una coordenada válida."}, 409)
         window = db.get(TileWindow, person.id)
-        if not window or window.status != "LISTO" or not window.relative_dir or window.radius_m != settings.window_radius_m:
+        if not window or window.status != "LISTO" or not window.relative_dir:
             return render(request, "public_preparing.html", {"person": person}, 409)
         try:
             verify_generated_tiles(
@@ -959,7 +992,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         _audit(db, request, "ENLACE_ABIERTO", "PUBLICO", person.id)
         db.commit()
         current = db.scalar(select(DrawingVersion).where(DrawingVersion.person_id == person.id, DrawingVersion.is_current.is_(True)))
-        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "current_geometry": current.geometry_json if current else "null"})
+        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "map_radius_m": window.radius_m, "current_geometry": current.geometry_json if current else "null"})
 
     @app.post("/p/{token}/submit")
     async def public_submit(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
@@ -999,7 +1032,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if not link or not link.person.active:
             raise HTTPException(404)
         window = db.get(TileWindow, link.person_id)
-        if not window or window.status != "LISTO" or not window.relative_dir or window.radius_m != settings.window_radius_m:
+        if not window or window.status != "LISTO" or not window.relative_dir:
             raise HTTPException(404)
         if window.min_zoom is None or window.max_zoom is None or not window.min_zoom <= z <= window.max_zoom:
             raise HTTPException(404)

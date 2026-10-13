@@ -83,7 +83,7 @@ Una migración irreversible no se “deshace” con una promesa automática. La 
 
 ## Ortofotos, teselas y modo sin CDN
 
-El catálogo usa `gdalinfo` sin cargar rásteres completos. En una instalación limpia, los municipios se detectan desde las carpetas de ortofotos y el catálogo inicial se programa automáticamente. Las ventanas de 600 m de radio se reproyectan a Web Mercator y solo se generan teselas XYZ de los niveles configurados, fuera de `Imagenes/`. Cada petición de tesela vuelve a validar el enlace de esa persona. Si cambia el radio configurado, las ventanas antiguas dejan de considerarse listas y se regeneran automáticamente.
+El catálogo usa `gdalinfo` sin cargar rásteres completos. En una instalación limpia, los municipios se detectan desde las carpetas de ortofotos y el catálogo inicial se programa automáticamente. El radio inicial de la ventana es 2000 m, pero el administrador puede cambiarlo en **Configuración de teselas**. El valor se guarda en la base de datos y se aplica a cada persona nueva y a las regeneraciones posteriores; las ventanas existentes se mantienen con su radio original y las personas que ya enviaron un dibujo no se regeneran. Cada petición de tesela vuelve a validar el enlace de esa persona.
 
 Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces excluye automáticamente cualquier persona cuya imagen no esté físicamente verificada en todos los niveles configurados.
 

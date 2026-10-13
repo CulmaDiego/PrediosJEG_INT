@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.config import Settings
 from app.main import create_app
-from app.models import Job, Municipality, Person, TileWindow
+from app.models import Job, Municipality, Person, TileConfiguration, TileWindow
 
 
 def make_settings(tmp_path: Path, radius_m: int) -> Settings:
@@ -44,7 +44,7 @@ def test_clean_install_discovers_municipalities_and_queues_catalog(tmp_path: Pat
         assert jobs[0].status == "PENDIENTE"
 
 
-def test_radius_change_invalidates_old_tiles_and_queues_regeneration(tmp_path: Path):
+def test_environment_default_change_preserves_existing_tile_windows(tmp_path: Path):
     old_settings = make_settings(tmp_path, 350)
     old_app = create_app(old_settings, create_schema=True)
     with old_app.state.Session() as db:
@@ -71,8 +71,11 @@ def test_radius_change_invalidates_old_tiles_and_queues_regeneration(tmp_path: P
     with new_app.state.Session() as db:
         person = db.get(Person, person_id)
         window = db.get(TileWindow, person_id)
-        assert person.orthophoto_status == "PENDIENTE"
-        assert window.status == "PENDIENTE"
+        assert person.orthophoto_status == "LISTO"
+        assert window.status == "LISTO"
         assert window.radius_m == 350
+        configuration = db.get(TileConfiguration, 1)
+        assert configuration is not None
+        assert configuration.radius_m == 350
         jobs = list(db.scalars(select(Job).where(Job.job_type == "PREPARE_WINDOW")))
-        assert len(jobs) == 1
+        assert jobs == []

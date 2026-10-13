@@ -114,7 +114,7 @@ if (-not (Test-Path -LiteralPath $envFile)) {
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     $secret = [Convert]::ToBase64String($bytes)
-    $lines = @('PREDIOS_ENV=production',"PREDIOS_DATA_DIR=$DataDir","PREDIOS_ORTHOPHOTO_ROOT=$OrthoDir","PREDIOS_SECRET_KEY=$secret","PREDIOS_PUBLIC_BASE_URL=$publicUrl",'PREDIOS_COOKIE_SECURE=true',"PREDIOS_QGIS_ROOT=$QgisRoot",'PREDIOS_ASSET_MODE=local','PREDIOS_WINDOW_RADIUS_M=600')
+    $lines = @('PREDIOS_ENV=production',"PREDIOS_DATA_DIR=$DataDir","PREDIOS_ORTHOPHOTO_ROOT=$OrthoDir","PREDIOS_SECRET_KEY=$secret","PREDIOS_PUBLIC_BASE_URL=$publicUrl",'PREDIOS_COOKIE_SECURE=true',"PREDIOS_QGIS_ROOT=$QgisRoot",'PREDIOS_ASSET_MODE=local','PREDIOS_WINDOW_RADIUS_M=2000')
     [IO.File]::WriteAllLines($envFile, $lines)
 }
 . (Join-Path $resolvedInstall 'scripts\Cargar-Entorno.ps1') -Path $envFile

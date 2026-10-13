@@ -22,6 +22,7 @@
       <a href="/admin/personas" {% if request.url.path.startswith('/admin/personas') %}class="active" aria-current="page"{% endif %}>Personas</a>
       <a href="/admin/importar" {% if request.url.path.startswith('/admin/importar') %}class="active" aria-current="page"{% endif %}>Importar</a>
       <a href="/admin/ortofotos" {% if request.url.path.startswith('/admin/ortofotos') or request.url.path.startswith('/admin/reportes') %}class="active" aria-current="page"{% endif %}>Ortofotos</a>
+      <a href="/admin/configuracion" {% if request.url.path.startswith('/admin/configuracion') %}class="active" aria-current="page"{% endif %}>Configuración</a>
     </nav>
     <form method="post" action="/admin/logout" class="logout-form">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
@@ -34,7 +35,7 @@
       <details>
         <summary aria-label="Abrir menú">Menú</summary>
         <nav>
-          <a href="/admin">Resumen</a><a href="/admin/municipios">Municipios</a><a href="/admin/personas">Personas</a><a href="/admin/importar">Importar</a><a href="/admin/ortofotos">Ortofotos</a>
+          <a href="/admin">Resumen</a><a href="/admin/municipios">Municipios</a><a href="/admin/personas">Personas</a><a href="/admin/importar">Importar</a><a href="/admin/ortofotos">Ortofotos</a><a href="/admin/configuracion">Configuración</a>
         </nav>
       </details>
     </header>

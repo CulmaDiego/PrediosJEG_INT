@@ -146,6 +146,13 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
 
+class TileConfiguration(Base):
+    __tablename__ = "tile_configurations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    radius_m: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class TileWindow(Base):
     __tablename__ = "tile_windows"
     person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), primary_key=True)

@@ -40,7 +40,7 @@ def test_admin_can_create_one_person_and_queue_tiles(test_app):
         assert person.name == "Beatriz Gómez"
         assert person.reference_lon == -75.032
         assert person.reference_lat == 6.295
-        job = db.scalar(select(Job).where(Job.job_type == "PREPARE_WINDOW", Job.payload_json == json.dumps({"person_id": person.id}, sort_keys=True, separators=(",", ":"))))
+        job = db.scalar(select(Job).where(Job.job_type == "PREPARE_WINDOW", Job.payload_json == json.dumps({"person_id": person.id, "radius_m": 350}, sort_keys=True, separators=(",", ":"))))
         assert job is not None
         assert job.status == "PENDIENTE"
 

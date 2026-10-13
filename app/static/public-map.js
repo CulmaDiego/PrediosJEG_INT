@@ -5,7 +5,7 @@
   const lat = Number(mapNode.dataset.lat);
   const lon = Number(mapNode.dataset.lon);
   const csrf = mapNode.dataset.csrf;
-  const radius = Number(mapNode.dataset.radius || 600);
+  const radius = Number(mapNode.dataset.radius || 2000);
   const nativeMinZoom = Number(mapNode.dataset.minZoom || 15);
   const nativeMaxZoom = Number(mapNode.dataset.maxNativeZoom || 19);
   const displayMaxZoom = Math.max(24, nativeMaxZoom);
