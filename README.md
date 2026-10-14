@@ -57,7 +57,7 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
   -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
-  -Version 'v0.3.4'
+  -Version 'v0.3.5'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -83,9 +83,11 @@ Una migración irreversible no se “deshace” con una promesa automática. La 
 
 ## Ortofotos, teselas y modo sin CDN
 
-El catálogo usa `gdalinfo` sin cargar rásteres completos. En una instalación limpia, los municipios se detectan desde las carpetas de ortofotos y el catálogo inicial se programa automáticamente. El radio inicial de la ventana es 2000 m, pero el administrador puede cambiarlo en **Configuración de teselas**. El valor se guarda en la base de datos y se aplica a cada persona nueva y a las regeneraciones posteriores; las ventanas existentes se mantienen con su radio original y las personas que ya enviaron un dibujo no se regeneran. Cada petición de tesela vuelve a validar el enlace de esa persona.
+El catálogo usa `gdalinfo` sin cargar rásteres completos. El radio inicial de la ventana es 2000 m, pero el administrador puede cambiarlo en **Configuración de teselas** entre 100 y 50.000 m. El valor se guarda en la base de datos y se aplica a cada persona nueva y a las regeneraciones posteriores; las ventanas existentes y las personas que ya enviaron su dibujo se conservan.
 
-Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces excluye automáticamente cualquier persona cuya imagen no esté físicamente verificada en todos los niveles configurados.
+La preparación ya no crea una pirámide completa de PNG por persona. El trabajador genera primero un VRT privado recortado de la ortofoto, que normalmente tarda solo segundos, y marca el enlace como listo. Cuando la persona abre, aleja o acerca el mapa, el servidor crea únicamente las teselas visibles y las guarda en caché para las siguientes visitas. Así un radio grande no bloquea la cola por decenas de miles de imágenes que nadie verá. Cada petición vuelve a validar el enlace de esa persona.
+
+Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces incluye las personas cuya fuente privada esté lista; las teselas detalladas se completan bajo demanda.
 
 Desde **Personas → Informe de seguimiento** se descarga un Excel con resumen de respuestas, aperturas, pendientes y estado de imágenes, más una hoja detallada por persona. El mismo informe puede limitarse a un municipio.
 
@@ -98,7 +100,7 @@ La interfaz fija Leaflet 1.9.4 y Leaflet-Geoman 2.18.3. Ambos ya están incluido
 - Administrador único con Argon2id, sesión vencible, cookies `HttpOnly`, `Secure` en producción y `SameSite=Strict`.
 - CSRF, CSP, CORS no abierto, rate limiting, ORM, rutas generadas por servidor y filtros permitidos.
 - Tokens públicos aleatorios de 256 bits; solo se almacena SHA-256. Regenerar revoca el anterior.
-- Polygon WGS84 con 3–100 vértices, anillo cerrado, sin autointersecciones, área positiva y todos los vértices a 300 m o menos del punto.
+- Polygon WGS84 con 3–100 vértices, anillo cerrado, sin autointersecciones, área positiva y todos los vértices dentro del radio de la ventana de ortofoto de esa persona.
 - SQLite con WAL, `busy_timeout=30000`, transacciones cortas e índices para la carga prevista de un único servidor.
 
 No ponga bases, Excel reales, teselas, exportaciones, respaldos, logs, secretos ni ortofotos en Git. `.gitignore` los excluye desde el inicio.

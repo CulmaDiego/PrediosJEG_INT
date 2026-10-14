@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Fecha de actualización: 2026-09-30.
+Fecha de actualización: 2026-10-13.
 
 ## Etapa 1 — Base local y seguridad
 
@@ -42,9 +42,9 @@ Fecha de actualización: 2026-09-30.
 - [x] Inventario GDAL en lectura y errores por fuente sin detener el catálogo.
 - [x] Instalación limpia capaz de descubrir municipios desde las carpetas, programar el catálogo inicial y reasignar nombres equivalentes con o sin tilde.
 - [x] Cola SQLite reanudable, reclamo atómico, progreso y errores visibles.
-- [x] Radio de ventana de teselas configurable desde el panel administrador, persistente y aplicado a personas nuevas y regeneraciones; las ventanas y dibujos existentes se conservan.
-- [x] Generación y regeneración manual por persona, selección o municipio, con verificación física de la tesela central en cada nivel.
-- [x] Descarga de enlaces limitada a personas con imágenes verificadas; los enlaces pendientes muestran una pantalla de preparación en lugar de un mapa vacío.
+- [x] Radio de ventana configurable desde el panel administrador, persistente y ampliable hasta 50 km; las ventanas y dibujos existentes se conservan.
+- [x] Preparación rápida de un VRT privado por persona y teselas PNG bajo demanda con caché, para que radios grandes no generen toda la pirámide antes de publicar el enlace.
+- [x] Descarga de enlaces limitada a VRTs o pirámides heredadas verificadas; los enlaces pendientes muestran una pantalla de preparación en lugar de un mapa vacío.
 - [x] Autorización de cada tesela contra persona/enlace.
 - [x] Exportaciones vigentes GeoJSON, GeoPackage, Shapefile y Excel.
 - [x] Las exportaciones masivas, incluido Shapefile, seleccionan únicamente la última versión de cada persona.

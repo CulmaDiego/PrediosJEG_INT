@@ -15,7 +15,7 @@
     [lat - latDelta, lon - lonDelta],
     [lat + latDelta, lon + lonDelta],
   );
-  const allowedRadius = Math.min(300, radius);
+  const allowedRadius = radius;
   const allowedLatDelta = allowedRadius / 111320;
   const allowedLonDelta = allowedRadius / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.2));
   const allowedBounds = L.latLngBounds(
@@ -34,7 +34,7 @@
   const overviewMinZoom = Math.floor(map.getBoundsZoom(allowedBounds, false));
   map.setMinZoom(Math.max(nativeMinZoom, overviewMinZoom));
   map.setMaxZoom(displayMaxZoom);
-  map.setView([lat, lon], Math.max(18, map.getMinZoom()));
+  map.fitBounds(allowedBounds, { padding: [20, 20], maxZoom: Math.min(16, nativeMaxZoom) });
   mapNode.dataset.minDisplayZoom = String(map.getMinZoom());
   if (mapNode.dataset.window === 'LISTO') {
     L.tileLayer(`/p/${encodeURIComponent(token)}/tiles/{z}/{x}/{y}.png`, {

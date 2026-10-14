@@ -161,6 +161,7 @@ class TileWindow(Base):
     min_zoom: Mapped[int | None] = mapped_column(Integer)
     max_zoom: Mapped[int | None] = mapped_column(Integer)
     radius_m: Mapped[int] = mapped_column(Integer, default=350, server_default="350", nullable=False)
+    render_mode: Mapped[str] = mapped_column(String(30), default="PREGENERATED", server_default="PREGENERATED", nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="PENDIENTE", nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

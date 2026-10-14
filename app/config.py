@@ -31,6 +31,9 @@ class Settings:
     asset_mode: str = "cdn"
     max_upload_bytes: int = 10 * 1024 * 1024
     session_hours: int = 8
+    max_tile_radius_m: int = 50_000
+    dynamic_tile_workers: int = 4
+    dynamic_tile_timeout_seconds: int = 90
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -62,10 +65,13 @@ class Settings:
             public_base_url=os.getenv("PREDIOS_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/"),
             cookie_secure=_env_bool("PREDIOS_COOKIE_SECURE", environment == "production"),
             qgis_root=Path(os.getenv("PREDIOS_QGIS_ROOT", r"C:\Program Files\QGIS 3.44.3")),
-            window_radius_m=int(os.getenv("PREDIOS_WINDOW_RADIUS_M", "2000")),
+            window_radius_m=min(50_000, max(100, int(os.getenv("PREDIOS_WINDOW_RADIUS_M", "2000")))),
             tile_min_zoom=int(os.getenv("PREDIOS_TILE_MIN_ZOOM", "15")),
             tile_max_zoom=int(os.getenv("PREDIOS_TILE_MAX_ZOOM", "19")),
             asset_mode=os.getenv("PREDIOS_ASSET_MODE", "cdn").strip().lower(),
+            max_tile_radius_m=min(50_000, max(100, int(os.getenv("PREDIOS_TILE_MAX_RADIUS_M", "50000")))),
+            dynamic_tile_workers=max(1, int(os.getenv("PREDIOS_DYNAMIC_TILE_WORKERS", "4"))),
+            dynamic_tile_timeout_seconds=max(10, int(os.getenv("PREDIOS_DYNAMIC_TILE_TIMEOUT_SECONDS", "90"))),
         )
 
     def ensure_directories(self) -> None:

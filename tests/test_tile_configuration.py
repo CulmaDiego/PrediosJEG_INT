@@ -90,10 +90,10 @@ def test_admin_rejects_an_unsafe_tile_radius(test_app):
     app, client, _, _ = test_app
     csrf = login(client)
 
-    response = client.post("/admin/configuracion/teselas", data={"csrf_token": csrf, "radius_m": "99"})
+    response = client.post("/admin/configuracion/teselas", data={"csrf_token": csrf, "radius_m": "50001"})
 
     assert response.status_code == 422
-    assert "El radio debe estar entre 100 y 10000 metros." in response.text
+    assert "El radio debe estar entre 100 y 50000 metros." in response.text
     with app.state.Session() as db:
         configuration = db.get(TileConfiguration, 1)
         assert configuration is not None

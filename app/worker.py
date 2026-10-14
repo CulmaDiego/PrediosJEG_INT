@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from .catalog import find_municipality, raster_files, synchronize_municipalities
 from .config import Settings
 from .db import build_engine, build_session_factory
-from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_command, qgis_environment, qgis_tool, verify_generated_tiles
+from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_environment, qgis_tool, tile_range_for_bounds
 from .models import Job, OrthophotoSource, Person, TileConfiguration, TileWindow, utcnow
 
 
@@ -87,18 +87,33 @@ def scan_catalog(db: Session, settings: Settings, job: Job) -> None:
         db.commit()
 
 
+def _overview_min_zoom(person: Person, radius_m: int, settings: Settings) -> int:
+    """El zoom inicial debe mostrar el predio grande con pocas teselas."""
+    for zoom in range(settings.tile_min_zoom, 7, -1):
+        min_x, min_y, max_x, max_y = tile_range_for_bounds(person.reference_lon, person.reference_lat, radius_m, zoom)
+        if (max_x - min_x + 1) * (max_y - min_y + 1) <= 16:
+            return zoom
+    return 8
+
+
 def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, radius_m: int) -> None:
     job_id = job.id
     person = db.get(Person, person_id)
     if not person or person.reference_lon is None or person.reference_lat is None:
         raise RuntimeError("La persona no existe o no tiene coordenadas")
-    window = db.get(TileWindow, person_id) or TileWindow(person_id=person_id)
-    db.add(window)
-    window.status = "PENDIENTE"
-    window.error = None
-    person.orthophoto_status = "PENDIENTE"
-    person.orthophoto_error = None
-    sources = db.scalars(select(OrthophotoSource).where(OrthophotoSource.municipality_id == person.municipality_id, OrthophotoSource.status == "LISTO")).all()
+    window = db.get(TileWindow, person_id)
+    if window is None:
+        window = TileWindow(person_id=person_id, status="PENDIENTE")
+        db.add(window)
+    previous_dir = window.relative_dir
+    sources = db.scalars(
+        select(
+            OrthophotoSource,
+        ).where(
+            OrthophotoSource.municipality_id == person.municipality_id,
+            OrthophotoSource.status == "LISTO",
+        )
+    ).all()
     requested_bounds = metres_bounds(person.reference_lon, person.reference_lat, radius_m)
     source = next((candidate for candidate in sources if candidate.bounds_json and bounds_intersect(json.loads(candidate.bounds_json), requested_bounds)), None)
     if source is None:
@@ -116,41 +131,43 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
     relative_dir = f"person_{person.id}_{uuid.uuid4().hex[:12]}"
     output_dir = settings.data_dir / "tiles" / relative_dir
     output_dir.mkdir(parents=True, exist_ok=False)
-    vrt_path = settings.data_dir / "tmp" / f"{relative_dir}.vrt"
+    vrt_path = output_dir / "source.vrt"
     xmin, ymin, xmax, ymax = requested_bounds
-    warp = subprocess.run(
-        [str(qgis_tool(settings, "gdalwarp")), "-overwrite", "-of", "VRT", "-b", "1", "-b", "2", "-b", "3", "-dstalpha", "-te_srs", "EPSG:9377", "-te", str(xmin), str(ymin), str(xmax), str(ymax), "-t_srs", "EPSG:3857", "-r", "bilinear", str(source_path), str(vrt_path)],
-        capture_output=True,
-        text=True,
-        timeout=600,
-        env=qgis_environment(settings),
-    )
-    if warp.returncode != 0:
-        raise RuntimeError(f"gdalwarp: {warp.stderr.strip()}")
-    job.progress = 35
     try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        if db.get(Person, person_id) is None or db.get(Job, job_id) is None:
-            vrt_path.unlink(missing_ok=True)
-            shutil.rmtree(output_dir, ignore_errors=True)
-            return
-        raise
-    gdal2tiles = qgis_command(settings, "gdal2tiles")
-    tiles = subprocess.run(
-        [*gdal2tiles, "--xyz", "--webviewer=none", "--processes=1", "--zoom", f"{settings.tile_min_zoom}-{settings.tile_max_zoom}", str(vrt_path), str(output_dir)],
-        capture_output=True,
-        text=True,
-        timeout=3600,
-        env=qgis_environment(settings),
-    )
-    vrt_path.unlink(missing_ok=True)
-    if tiles.returncode != 0:
-        shutil.rmtree(output_dir, ignore_errors=True)
-        raise RuntimeError(f"gdal2tiles: {tiles.stderr.strip()}")
-    try:
-        verify_generated_tiles(output_dir, person.reference_lon, person.reference_lat, settings.tile_min_zoom, settings.tile_max_zoom)
+        warp = subprocess.run(
+            [
+                str(qgis_tool(settings, "gdalwarp")),
+                "-overwrite",
+                "-of",
+                "VRT",
+                "-b",
+                "1",
+                "-b",
+                "2",
+                "-b",
+                "3",
+                "-dstalpha",
+                "-te_srs",
+                "EPSG:9377",
+                "-te",
+                str(xmin),
+                str(ymin),
+                str(xmax),
+                str(ymax),
+                "-t_srs",
+                "EPSG:3857",
+                "-r",
+                "bilinear",
+                str(source_path),
+                str(vrt_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=qgis_environment(settings),
+        )
+        if warp.returncode != 0 or not vrt_path.is_file():
+            raise RuntimeError(f"gdalwarp: {warp.stderr.strip() or warp.stdout.strip()}")
     except Exception:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
@@ -162,28 +179,27 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
         return
     window = db.get(TileWindow, person_id) or TileWindow(person_id=person_id)
     db.add(window)
-    if window.relative_dir:
-        old = (settings.data_dir / "tiles" / window.relative_dir).resolve()
-        if old.is_dir() and old != output_dir.resolve():
-            shutil.rmtree(old)
     window.source_id = source.id
     window.relative_dir = relative_dir
-    window.min_zoom = settings.tile_min_zoom
+    window.min_zoom = _overview_min_zoom(person, radius_m, settings)
     window.max_zoom = settings.tile_max_zoom
     window.radius_m = radius_m
+    window.render_mode = "ON_DEMAND"
     window.status = "LISTO"
     window.error = None
     person.orthophoto_status = "LISTO"
     person.orthophoto_error = None
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        if db.get(Person, person_id) is None:
-            shutil.rmtree(output_dir, ignore_errors=True)
+    job.progress = 95
+    db.commit()
+    if previous_dir and previous_dir != relative_dir:
+        old = (settings.data_dir / "tiles" / previous_dir).resolve()
+        tiles_root = (settings.data_dir / "tiles").resolve()
+        try:
+            old.relative_to(tiles_root)
+        except ValueError:
             return
-        raise
-
+        if old.is_dir():
+            shutil.rmtree(old, ignore_errors=True)
 
 def execute_job(db: Session, settings: Settings, job: Job) -> None:
     payload = json.loads(job.payload_json)
@@ -191,7 +207,7 @@ def execute_job(db: Session, settings: Settings, job: Job) -> None:
         scan_catalog(db, settings, job)
     elif job.job_type == "PREPARE_WINDOW":
         radius_m = int(payload.get("radius_m", _tile_radius(db, settings)))
-        if not 100 <= radius_m <= 10_000:
+        if not 100 <= radius_m <= settings.max_tile_radius_m:
             raise RuntimeError("El radio de teselas solicitado no es válido")
         prepare_window(db, settings, job, int(payload["person_id"]), radius_m)
     else:

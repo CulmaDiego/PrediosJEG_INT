@@ -1,6 +1,6 @@
 # Paso a producción en el disco D:
 
-Esta guía instala **Predios Remotos v0.3.4** en un único PC Windows de la oficina. Código, base de datos, teselas y ortofotos quedan en `D:`; QGIS y Python pueden seguir instalados en `C:`. No conecte el dominio público hasta completar las comprobaciones locales.
+Esta guía instala **Predios Remotos v0.3.5** en un único PC Windows de la oficina. Código, base de datos, teselas y ortofotos quedan en `D:`; QGIS y Python pueden seguir instalados en `C:`. No conecte el dominio público hasta completar las comprobaciones locales.
 
 ## 1. Preparar el equipo de oficina
 
@@ -35,7 +35,7 @@ El instalador configura estas rutas automáticamente, verifica que exista `proj.
 
 ## 2. Instalar la versión publicada
 
-La etiqueta `v0.3.4` ya está publicada: **no la vuelva a crear ni la mueva**. Descargue una copia del repositorio o al menos `INSTALAR_PROD.ps1` de esa etiqueta en una carpeta temporal. Abra PowerShell **como administrador** en esa carpeta y ejecute:
+La etiqueta `v0.3.5` ya está publicada: **no la vuelva a crear ni la mueva**. Descargue una copia del repositorio o al menos `INSTALAR_PROD.ps1` de esa etiqueta en una carpeta temporal. Abra PowerShell **como administrador** en esa carpeta y ejecute:
 
 ```powershell
 .\INSTALAR_PROD.ps1 `
@@ -44,7 +44,7 @@ La etiqueta `v0.3.4` ya está publicada: **no la vuelva a crear ni la mueva**. D
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
   -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
-  -Version 'v0.3.4'
+  -Version 'v0.3.5'
 ```
 
 Si el repositorio exige autenticación, Git se la pedirá; no incorpore credenciales en `-RepoUrl`. El instalador clonará la etiqueta, comprobará los recursos web locales, creará `D:\PrediosRemotos\datos\config\production.env`, solicitará el dominio HTTPS y una contraseña **nueva** de al menos 12 caracteres para `admin`, migrará la base y registrará las tareas `PrediosRemotos-Web` y `PrediosRemotos-Worker`. Se detendrá si falla algún paso. La contraseña de pruebas no se traslada automáticamente.
@@ -63,7 +63,7 @@ Invoke-RestMethod http://127.0.0.1:8000/ready
 Get-ScheduledTask -TaskName 'PrediosRemotos-*' | Select-Object TaskName,State
 ```
 
-Espere `status: ok`, `version: 0.3.4` y `status: ready`. Entre a `http://127.0.0.1:8000/admin` con `admin` y la contraseña recién creada. En **Ortofotos**, pulse **Actualizar catálogo** y confirme que aparezcan los municipios y que los rásteres sean legibles. Si no aparecen, revise las carpetas de `D:\PrediosRemotos\ortofotos`, el controlador GDAL y los mensajes del trabajador; **no distribuya enlaces todavía**. En **Configuración de teselas** el radio inicial es **2000 m** y puede cambiarse para las personas nuevas y futuras regeneraciones; las ventanas y los dibujos ya enviados se conservan. Cree una persona de prueba con coordenada dentro de una ortofoto, genere/verifique sus teselas y confirme que su enlace esté listo. El límite de vértices del polígono es una regla separada.
+Espere `status: ok`, `version: 0.3.5` y `status: ready`. Entre a `http://127.0.0.1:8000/admin` con `admin` y la contraseña recién creada. En **Ortofotos**, pulse **Actualizar catálogo** y confirme que aparezcan los municipios y que los rásteres sean legibles. Si no aparecen, revise las carpetas de `D:\PrediosRemotos\ortofotos`, el controlador GDAL y los mensajes del trabajador; **no distribuya enlaces todavía**. En **Configuración de teselas** el radio inicial es **2000 m** y puede cambiarse entre 100 y 50.000 m para personas nuevas y regeneraciones. La preparación crea un VRT privado rápido; las teselas detalladas se generan al navegar y quedan en caché. Las ventanas y los dibujos ya enviados se conservan. Cree una persona de prueba con coordenada dentro de una ortofoto, espere el estado **LISTO**, abra su enlace y acerque/aleje el mapa para comprobar la carga progresiva.
 
 Reinicie Windows una vez y repita las comprobaciones: las dos tareas deben arrancar con el disco `D:` disponible.
 

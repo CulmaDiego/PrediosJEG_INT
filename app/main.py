@@ -24,6 +24,7 @@ from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
 from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
 from .importer import normalize_phone, parse_coordinates, validate_import
+from .tile_rendering import DynamicTileRenderer, tile_cache_path, tile_intersects_window
 from .models import (
     Admin,
     AuditLog,
@@ -58,7 +59,6 @@ from .security import (
 templates = Jinja2Templates(directory=str(REPO_ROOT / "app" / "templates"))
 
 TILE_RADIUS_MIN_M = 100
-TILE_RADIUS_MAX_M = 10_000
 
 
 def get_db(request: Request) -> Iterator[Session]:
@@ -134,6 +134,10 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             or window.max_zoom is None
         ):
             continue
+        if window.render_mode == "ON_DEMAND":
+            if (settings.data_dir / "tiles" / window.relative_dir / "source.vrt").is_file():
+                ready.append(person)
+            continue
         try:
             verify_generated_tiles(
                 settings.data_dir / "tiles" / window.relative_dir,
@@ -146,7 +150,6 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             continue
         ready.append(person)
     return ready
-
 
 def _audit(db: Session, request: Request, action: str, actor: str, person_id: int | None = None, details: dict | None = None) -> None:
     db.add(
@@ -359,6 +362,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.state.settings = settings
     app.state.engine = engine
     app.state.Session = build_session_factory(engine)
+    app.state.tile_renderer = DynamicTileRenderer(settings)
     if inspect(engine).has_table("municipalities"):
         with app.state.Session() as db:
             _ensure_tile_configuration(db, settings)
@@ -480,7 +484,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         session = require_admin(request, db)
         configuration = _ensure_tile_configuration(db, settings)
         db.commit()
-        return render(request, "tile_configuration.html", {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": TILE_RADIUS_MAX_M})
+        return render(request, "tile_configuration.html", {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": settings.max_tile_radius_m})
 
     @app.post("/admin/configuracion/teselas", response_class=HTMLResponse)
     def tile_configuration_update(
@@ -492,11 +496,11 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         session = require_admin(request, db)
         verify_csrf(request, csrf_token, session)
         configuration = _ensure_tile_configuration(db, settings)
-        if not TILE_RADIUS_MIN_M <= radius_m <= TILE_RADIUS_MAX_M:
+        if not TILE_RADIUS_MIN_M <= radius_m <= settings.max_tile_radius_m:
             return render(
                 request,
                 "tile_configuration.html",
-                {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": TILE_RADIUS_MAX_M, "error": f"El radio debe estar entre {TILE_RADIUS_MIN_M} y {TILE_RADIUS_MAX_M} metros."},
+                {"admin": session.admin, "configuration": configuration, "min_radius_m": TILE_RADIUS_MIN_M, "max_radius_m": settings.max_tile_radius_m, "error": f"El radio debe estar entre {TILE_RADIUS_MIN_M} y {settings.max_tile_radius_m} metros."},
                 422,
             )
         previous_radius_m = configuration.radius_m
@@ -976,16 +980,20 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         window = db.get(TileWindow, person.id)
         if not window or window.status != "LISTO" or not window.relative_dir:
             return render(request, "public_preparing.html", {"person": person}, 409)
-        try:
-            verify_generated_tiles(
-                settings.data_dir / "tiles" / window.relative_dir,
-                person.reference_lon,
-                person.reference_lat,
-                window.min_zoom if window.min_zoom is not None else settings.tile_min_zoom,
-                window.max_zoom if window.max_zoom is not None else settings.tile_max_zoom,
-            )
-        except (OSError, RuntimeError):
-            return render(request, "public_preparing.html", {"person": person}, 409)
+        if window.render_mode == "ON_DEMAND":
+            if not (settings.data_dir / "tiles" / window.relative_dir / "source.vrt").is_file():
+                return render(request, "public_preparing.html", {"person": person}, 409)
+        else:
+            try:
+                verify_generated_tiles(
+                    settings.data_dir / "tiles" / window.relative_dir,
+                    person.reference_lon,
+                    person.reference_lat,
+                    window.min_zoom if window.min_zoom is not None else settings.tile_min_zoom,
+                    window.max_zoom if window.max_zoom is not None else settings.tile_max_zoom,
+                )
+            except (OSError, RuntimeError):
+                return render(request, "public_preparing.html", {"person": person}, 409)
         if person.status == "PENDIENTE":
             person.status = "ABRIO"
         person.last_opened_at = utcnow()
@@ -1006,7 +1014,9 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if person.reference_lon is None or person.reference_lat is None:
             raise HTTPException(409, "No hay coordenada de referencia")
         try:
-            geometry, area = validate_polygon(body.get("geometry") or {}, person.reference_lon, person.reference_lat)
+            window = db.get(TileWindow, person.id)
+            maximum_distance_m = window.radius_m if window and window.status == "LISTO" else 300
+            geometry, area = validate_polygon(body.get("geometry") or {}, person.reference_lon, person.reference_lat, maximum_distance_m)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
         db.execute(update(DrawingVersion).where(DrawingVersion.person_id == person.id, DrawingVersion.is_current.is_(True)).values(is_current=False))
@@ -1031,11 +1041,32 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         link = find_public_link(db, token, settings)
         if not link or not link.person.active:
             raise HTTPException(404)
+        rate_limiter.check(f"tile:{token}:{ip_fingerprint(request, settings)}", 600, 60)
         window = db.get(TileWindow, link.person_id)
         if not window or window.status != "LISTO" or not window.relative_dir:
             raise HTTPException(404)
         if window.min_zoom is None or window.max_zoom is None or not window.min_zoom <= z <= window.max_zoom:
             raise HTTPException(404)
+        if window.render_mode == "ON_DEMAND":
+            person = link.person
+            if person.reference_lon is None or person.reference_lat is None:
+                raise HTTPException(404)
+            try:
+                if not tile_intersects_window(person.reference_lon, person.reference_lat, window.radius_m, z, x, y):
+                    raise HTTPException(404)
+                tile = tile_cache_path(settings, window.relative_dir, z, x, y)
+            except ValueError:
+                raise HTTPException(404)
+            base = (settings.data_dir / "tiles" / window.relative_dir).resolve()
+            root = (settings.data_dir / "tiles").resolve()
+            try:
+                base.relative_to(root)
+                tile = request.app.state.tile_renderer.render(base / "source.vrt", tile, z, x, y)
+            except ValueError:
+                raise HTTPException(404)
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+                raise HTTPException(503, "La imagen se está preparando; intente de nuevo en unos segundos") from exc
+            return FileResponse(tile, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
         base = (settings.data_dir / "tiles" / window.relative_dir).resolve()
         tile = (base / str(z) / str(x) / f"{y}.png").resolve()
         try:

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Configuración · Predios Remotos{% endblock %}
 {% block content %}
-<div class="page-head"><div><p class="eyebrow">Operación</p><h1>Configuración de teselas</h1><p class="muted">Defina el área de ortofoto que se preparará alrededor de cada coordenada.</p></div></div>
+<div class="page-head"><div><p class="eyebrow">Operación</p><h1>Configuración de teselas</h1><p class="muted">Defina el área de ortofoto disponible alrededor de cada coordenada.</p></div></div>
 {% if request.query_params.get('guardado') %}<div class="alert success" role="status">El radio de las teselas se actualizó correctamente.</div>{% endif %}
 {% if error %}<div class="alert danger" role="alert">{{ error }}</div>{% endif %}
 <section class="panel">
-  <div class="panel-head"><div><h2>Radio de la ventana</h2><p class="muted">Se aplica a personas nuevas y a regeneraciones posteriores.</p></div></div>
+  <div class="panel-head"><div><h2>Radio de la ventana</h2><p class="muted">Se aplica a personas nuevas y a regeneraciones posteriores. La vista queda disponible al terminar el recorte inicial.</p></div></div>
   <form method="post" action="/admin/configuracion/teselas" class="stack-form">
     <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
     <label>Radio en metros<input type="number" name="radius_m" value="{{ configuration.radius_m }}" min="{{ min_radius_m }}" max="{{ max_radius_m }}" step="1" required inputmode="numeric"></label>
@@ -15,6 +15,6 @@
 </section>
 <section class="panel compact-panel">
   <div class="panel-head"><h2>Qué ocurre al guardar</h2></div>
-  <p class="muted">Las teselas ya preparadas permanecen iguales. Cada persona nueva, importación nueva o acción de “Generar y verificar teselas” usará este radio. Las personas que ya enviaron su dibujo se conservan y no se regeneran.</p>
+  <p class="muted">Las ventanas ya preparadas permanecen iguales. Cada persona nueva, importación nueva o regeneración prepara primero una fuente de ortofoto ligera; las teselas detalladas se crean y guardan solo cuando la persona navega por esa zona. Las personas que ya enviaron su dibujo se conservan y no se regeneran.</p>
 </section>
 {% endblock %}
