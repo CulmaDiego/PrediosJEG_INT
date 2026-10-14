@@ -96,6 +96,9 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
             browser = playwright.chromium.launch(executable_path=str(browser_executable), headless=True)
             for width in (320, 375, 430):
                 page = browser.new_page(viewport={"width": width, "height": 760})
+                if width == 320:
+                    # Keep the UI usable while an older server is being restarted.
+                    page.route('**/preload', lambda route: route.fulfill(status=404, body='{}'))
                 tile_ok = []
                 page.on("response", lambda response: tile_ok.append(response.status) if "/tiles/" in response.url else None)
                 page.goto(f"http://127.0.0.1:{port}/p/{token}", wait_until="networkidle")

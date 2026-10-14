@@ -328,8 +328,11 @@
     setReady(false);
     try {
       const response = await fetch(`/p/${encodeURIComponent(token)}/preload`, { credentials: 'same-origin' });
-      if (!response.ok) throw new Error('La imagen todavía no está disponible.');
-      const manifest = await response.json();
+      if (!response.ok && response.status !== 404) throw new Error('La imagen todavía no está disponible.');
+      // The previous server can still be serving during an application restart.
+      const manifest = response.status === 404
+        ? { tiles: Array.from({ length: nativeMaxZoom - nativeMinZoom + 1 }, (_, index) => viewportTiles(nativeMinZoom + index)).flat() }
+        : await response.json();
       const tiles = [...new Map([...viewportTiles(Math.round(map.getZoom())), ...manifest.tiles].map(tile => [tile.join('/'), tile])).values()];
       await preloadBatch(tiles, (done, total) => { loadMessage.textContent = `Cargando imagen y niveles de zoom… ${Math.round(done * 100 / total)}%`; });
       await new Promise((resolve, reject) => {

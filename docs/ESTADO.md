@@ -73,7 +73,7 @@ Producción no se considera lista hasta completar los dos puntos manuales pendie
 - [x] Zoom máximo calculado a partir de metros por píxel; control de carga y botón Reintentar, y caché del navegador diferenciada por generación.
 - [x] Script APLICAR_CORRECCION_ORTOFOTOS.ps1 con respaldo, identificación de procesos del checkout, reinicio y reintento de imágenes fallidas; conserva enlaces y dibujos enviados.
 - Verificación: 43 pruebas pasaron, incluido navegador Edge en tamaños móviles. Prueba aislada con una copia de la base real y el ECW rural de San Carlos: ventana LISTO con radio 10.000 m y zoom 12–20; página y teselas HTTP 200, petición fuera de área HTTP 404. No se alteraron la base productiva ni las ortofotos originales.
-- [ ] Activar en la instancia actual: Windows denegó detener el proceso web 8180 porque se ejecuta elevado. Ejecutar el script desde PowerShell como administrador.
+- [x] Modo ORIGINAL activo en la instancia actual: se verificó una ventana LISTO con radio 5.000 m antes de preparar esta actualización.
 
 ## Precarga, zoom y dibujo — 2026-10-14
 
@@ -86,3 +86,5 @@ Producción no se considera lista hasta completar los dos puntos manuales pendie
 - Evidencia local aislada con ECW real y radio 5.000 m: 198 teselas preparadas en 39,64 s antes de habilitar; navegador móvil listo en 2,25 s, ocho acercamientos hasta zoom 20 entre 0,12 y 0,16 s cada uno, cero errores HTTP de imágenes y cero errores JavaScript. Estas medidas corresponden a este PC y conexión local.
 
 - Verificación final de esta actualización: 45 pruebas pasaron, incluida la comprobación de conservación de vértices, curvas a mano, precarga autenticada y navegación móvil.
+
+- Compatibilidad durante la actualización: la plantilla acepta el servidor anterior y precarga sus vistas de zoom cuando el endpoint nuevo aún no existe; la página productiva se verificó con HTTP 200. Windows reportó cancelada la elevación para reiniciar los procesos actuales, por lo que el reinicio de los lectores persistentes queda pendiente.
