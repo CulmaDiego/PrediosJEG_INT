@@ -3,10 +3,7 @@ $repo = $PSScriptRoot
 Set-Location -LiteralPath $repo
 $python = Join-Path $repo '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) { throw 'Ejecute primero .\INICIAR_DEV.ps1 para crear el entorno.' }
-& $python -m pytest -q
-if ($LASTEXITCODE -ne 0) { throw 'Las pruebas fallaron. No prepare una versión todavía.' }
-& $python -m pip check
-if ($LASTEXITCODE -ne 0) { throw 'Hay dependencias incompatibles.' }
+& (Join-Path $repo 'scripts\VERIFICAR_CALIDAD.ps1') -Python $python -InstallDependencies
 git status --short --branch
 $lastTag = git tag --list 'v*' --sort=-version:refname | Select-Object -First 1
 if ($LASTEXITCODE -ne 0) { throw 'No se pudieron consultar las etiquetas Git.' }

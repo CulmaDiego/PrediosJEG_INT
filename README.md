@@ -87,6 +87,8 @@ El catálogo usa `gdalinfo` sin cargar rásteres completos. El radio inicial de 
 
 La aplicación conserva las ortofotos completas en su formato y resolución originales. La preparación crea referencias privadas a sus bandas RGB, sin recortar, reproyectar ni reducir los originales, y verifica una tesela en el punto de referencia antes de habilitar el enlace. El servidor lee solo las zonas visibles, prioriza la fuente de mayor resolución cuando se superponen y guarda PNG sin pérdida en una caché por ventana. Cada tesela lleva una máscara circular; los píxeles fuera del radio autorizado se borran en RGB y transparencia en el servidor. Antes de habilitar el enlace, el trabajador prepara la cobertura general y una zona cercana al punto en cada nivel de zoom. Al abrir el mapa, el navegador descarga y decodifica esa precarga antes de habilitar las herramientas; también adelanta las vistas de zoom cercanas al navegar. Los lectores GDAL permanecen abiertos con memoria limitada para cargar otras zonas sin iniciar un proceso por tesela. Cada petición valida el enlace, y el zoom máximo se calcula a partir de la resolución real de la fuente. Las ventanas anteriores siguen siendo compatibles; regenerarlas activa el modo ORIGINAL.
 
+Al acercar o desplazar el mapa, cada zona conserva los píxeles de un nivel ya cargado hasta que llega su detalle original. La caché del navegador limita las descargas simultáneas a cuatro, prioriza la vista actual y reintenta fallos transitorios. Al volver a una zona, los lienzos retenidos completan su detalle aunque su descarga anterior se haya cancelado. La generación usa una cola independiente y limitada, comparte las peticiones de una misma tesela y libera la conexión a la base antes de esperar: una ortofoto lenta no ocupa los hilos que sirven las páginas. Los PNG ya preparados se entregan sin gastar el límite de nuevas generaciones. Las zonas nuevas alejadas de la precarga se siguen leyendo bajo demanda; durante esa espera se muestra su cobertura general.
+
 Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces incluye las personas cuya fuente privada esté lista; las teselas detalladas se completan bajo demanda.
 
 Desde **Personas → Informe de seguimiento** se descarga un Excel con resumen de respuestas, aperturas, pendientes y estado de imágenes, más una hoja detallada por persona. El mismo informe puede limitarse a un municipio.
@@ -109,9 +111,11 @@ No ponga bases, Excel reales, teselas, exportaciones, respaldos, logs, secretos 
 
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m pytest -q
+.\scripts\VERIFICAR_CALIDAD.ps1 -InstallDependencies
 .\.venv\Scripts\python.exe -m app.worker --once
 ```
+
+Antes de publicar, ejecute `VERIFICAR_CALIDAD.ps1`: instala las herramientas fijadas, comprueba dependencias, Ruff, todas las pruebas (incluido navegador) y la auditoría de seguridad. GitHub Actions y `PREPARAR_VERSION.ps1` usan ese mismo control. Las regresiones de navegador requieren Chrome o Edge; en CI su ausencia falla la ejecución.
 
 El avance y la evidencia de verificación se mantienen en [docs/ESTADO.md](docs/ESTADO.md).
 

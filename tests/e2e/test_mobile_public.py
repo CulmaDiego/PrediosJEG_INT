@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import math
+import os
 import socket
 import threading
 import time
@@ -29,10 +30,20 @@ def tile_xy(lon: float, lat: float, zoom: int) -> tuple[int, int]:
     return int((lon + 180) / 360 * scale), int((1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * scale)
 
 
+def zoom_to(page, target: int):
+    while int(page.locator('#map').get_attribute('data-zoom')) != target:
+        previous = int(page.locator('#map').get_attribute('data-zoom'))
+        direction = 1 if previous < target else -1
+        page.locator('.leaflet-control-zoom-in' if direction > 0 else '.leaflet-control-zoom-out').click()
+        expect(page.locator('#map')).to_have_attribute('data-zoom', str(previous + direction))
+
+
 @pytest.mark.e2e
 def test_public_mobile_map_at_required_widths(tmp_path: Path):
     browser_executable = CHROME if CHROME.exists() else EDGE
     if not browser_executable.exists():
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            pytest.fail('El runner de CI necesita Chrome o Edge para ejecutar las regresiones de navegador')
         pytest.skip("No se encontró Chrome o Edge para la prueba de navegador")
     data = tmp_path / "data"
     orthos = tmp_path / "orthos"
@@ -154,6 +165,36 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     expect(page.locator('#mapStatus')).to_have_attribute('data-errors', '0')
                     map_box = page.locator("#map").bounding_box()
                     assert map_box
+                    page.locator('[data-tool="polygon"]').click()
+                    manual_points = [
+                        (180 + 125 * math.cos(index * math.tau / 48), 240 + 125 * math.sin(index * math.tau / 48))
+                        for index in range(48)
+                    ]
+                    for px, py in manual_points:
+                        page.mouse.click(map_box['x'] + px, map_box['y'] + py)
+                    page.mouse.click(map_box['x'] + manual_points[0][0], map_box['y'] + manual_points[0][1])
+                    manual = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert len(manual['coordinates'][0]) == 49
+                    assert manual['coordinates'][0][0] == manual['coordinates'][0][-1]
+                    assert manual != migrated
+                    expect(page.locator('[data-tool="edit"]')).to_have_class('tool active')
+                    page.reload(wait_until='networkidle')
+                    restored_manual = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert restored_manual == manual
+                    zoom_to(page, 18)
+                    map_box = page.locator('#map').bounding_box()
+                    page.locator('[data-tool="edit"]').click()
+                    vertex = page.locator('.marker-icon:not(.marker-icon-middle):visible').first.bounding_box()
+                    assert vertex
+                    vx, vy = vertex['x'] + vertex['width'] / 2, vertex['y'] + vertex['height'] / 2
+                    page.mouse.move(vx, vy)
+                    page.mouse.down()
+                    page.mouse.move(vx + 7, vy + 4, steps=4)
+                    page.mouse.up()
+                    expect(page.locator('#undoButton')).to_be_enabled()
+                    page.locator('#undoButton').click()
+                    undone_manual = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert undone_manual == manual
                     page.locator('[data-tool="freehand"]').click()
                     center = (180, 240)
                     curve = [(center[0] + 70 * math.cos(index * math.tau / 120), center[1] + 70 * math.sin(index * math.tau / 120)) for index in range(121)]
@@ -175,8 +216,7 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.reload(wait_until='networkidle')
                     restored = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
                     assert restored == curved
-                    while float(page.locator('#map').get_attribute('data-zoom')) < 18:
-                        page.locator('.leaflet-control-zoom-in').click()
+                    zoom_to(page, 18)
                     map_box = page.locator('#map').bounding_box()
                     page.locator('[data-tool="freehand"]').click()
                     points = [(150, 180), (215, 180), (215, 245), (150, 245), (150, 180)]

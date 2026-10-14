@@ -92,3 +92,15 @@ Producción no se considera lista hasta completar los dos puntos manuales pendie
 - Aplicación activa: precarga de 198 teselas completada en la ventana actual, navegador listo en 1,69 s y zoom 20 sin fallos de imagen ni JavaScript. Se conservó el último punto distinto del trazo a mano en el cierre, comprobado en navegador. Respaldo completo antes-precarga-20261014-f030efc creado y verificado con SQLite íntegra.
 
 - El usuario confirmó que no vio el aviso de elevación. Se agregó REINICIAR_APLICATIVO.cmd para solicitar el permiso desde su escritorio, con un modo SoloReiniciar que evita repetir el respaldo y la precarga. Ambos scripts PowerShell pasaron la validación sintáctica. El reinicio sigue pendiente de ejecución elevada por el usuario.
+
+## Continuidad de imagen y control de calidad — 2026-10-14
+
+- [x] Corregidos los cuatro errores de Ruff del run 38594034317. GitHub y PREPARAR_VERSION ejecutan el mismo VERIFICAR_CALIDAD.ps1, con herramientas fijadas, dependencias, Ruff, pruebas completas de navegador y auditoría.
+- [x] Las teselas se dibujan en canvas con cobertura autorizada ya decodificada mientras llega su detalle original; se conserva la animación de zoom entre niveles enteros.
+- [x] Descargas simultáneas limitadas a cuatro, prioridad para la vista actual, reintentos de 429/503 y otros fallos transitorios, cancelación de vistas obsoletas y límite de memoria de imágenes decodificadas.
+- [x] Pan corto conserva las peticiones que aún siguen visibles. Al regresar, los canvas retenidos reanudan el detalle cancelado sin repetir la finalización de Leaflet. Durante el arrastre se muestra la cobertura almacenada y las nuevas lecturas se reservan para la vista donde se detiene.
+- [x] Generación con cola independiente y limitada; peticiones iguales comparten una lectura. La base se libera antes de esperar y las teselas en caché no consumen el límite de generación. Saturar GDAL no bloquea páginas, precarga ni health.
+- [x] Regresiones con cargas lentas, movimiento fuera del centro, retorno al mismo zoom, cambios de orientación, fallos temporales y comprobación de píxeles sin huecos. El dibujo por puntos conserva 48 vértices con precisión, restauración y deshacer; solo se simplifica a mano.
+- Evidencia aislada con ECW original de San Carlos: 18 PNG de vista general y cero de detalle al entrar, navegador listo en 0,71 s; dos desplazamientos rápidos y zoom 20 completaron la última vista en 9,09 s, con 15 canvas visibles y cero huecos en 25 muestras. Cinco respuestas 503 transitorias se recuperaron automáticamente, sin errores JavaScript ni reintento manual. Medidas locales de este PC; las zonas nuevas siguen requiriendo lectura del original.
+- Verificación final local: 51 pruebas aprobadas, incluidas GDAL real y navegador, Ruff limpio, dependencias compatibles y auditoría sin vulnerabilidades conocidas.
+- El código se verifica en un servidor aislado y con copia de los datos. Aplicarlo al proceso productivo requiere ejecutar REINICIAR_APLICATIVO.cmd desde el escritorio, porque Windows protege los procesos iniciados como administrador.

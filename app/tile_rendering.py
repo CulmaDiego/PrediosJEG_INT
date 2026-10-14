@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import math
 import json
 import queue
 import subprocess
 import threading
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -147,11 +149,16 @@ def tile_cache_path(settings: Settings, relative_dir: str, zoom: int, x: int, y:
     return tile
 
 
-def _is_png(path: Path) -> bool:
+def is_cached_tile(path: Path) -> bool:
     try:
-        return path.stat().st_size >= 8 and path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        with path.open("rb") as stream:
+            return stream.read(8) == b"\x89PNG\r\n\x1a\n"
     except OSError:
         return False
+
+
+class TileQueueFull(RuntimeError):
+    """The bounded raster queue is busy; the browser can retry later."""
 
 
 class DynamicTileRenderer:
@@ -164,14 +171,52 @@ class DynamicTileRenderer:
         self._available = queue.LifoQueue()
         self._processes = []
         self._processes_guard = threading.Lock()
+        # Raster work must not occupy Starlette's shared thread pool: static
+        # files, authorization and health checks use that pool too.
+        self._executor = ThreadPoolExecutor(max_workers=settings.dynamic_tile_workers, thread_name_prefix="ortho-tile")
+        self._pending: dict[Path, Future] = {}
+        self._pending_guard = threading.Lock()
+        self._pending_limit = settings.dynamic_tile_workers * 4
+        self._closed = False
 
     def close(self):
+        with self._pending_guard:
+            if self._closed:
+                return
+            self._closed = True
+        self._executor.shutdown(wait=True, cancel_futures=True)
         with self._processes_guard:
             for process in self._processes:
                 process.close()
             self._processes.clear()
         while not self._available.empty():
             self._available.get_nowait()
+
+    async def render_async(self, vrt_path: Path, tile: Path, zoom: int, x: int, y: int) -> Path:
+        """Share one render per tile and await it outside the HTTP thread pool."""
+        if is_cached_tile(tile):
+            return tile
+        with self._pending_guard:
+            if self._closed:
+                raise RuntimeError("El lector de ortofotos se está reiniciando")
+            future = self._pending.get(tile)
+            if future is None:
+                if len(self._pending) >= self._pending_limit:
+                    raise TileQueueFull("La cola de ortofotos está ocupada")
+                future = self._executor.submit(self.render, vrt_path, tile, zoom, x, y)
+                self._pending[tile] = future
+
+        def completed(done):
+            with self._pending_guard:
+                if self._pending.get(tile) is done:
+                    self._pending.pop(tile, None)
+
+        future.add_done_callback(completed)
+        awaited = asyncio.wrap_future(future)
+        # A browser that moves away may cancel its request. The shared render
+        # still completes for other viewers and writes the reusable disk cache.
+        awaited.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
+        return await asyncio.shield(awaited)
 
     def _render_original(self, manifest, temporary, bounds):
         try:
@@ -194,11 +239,11 @@ class DynamicTileRenderer:
         return self._locks[hash(tile) % len(self._locks)]
 
     def render(self, vrt_path: Path, tile: Path, zoom: int, x: int, y: int) -> Path:
-        if _is_png(tile):
+        if is_cached_tile(tile):
             return tile
         lock = self._lock_for(tile)
         with lock:
-            if _is_png(tile):
+            if is_cached_tile(tile):
                 return tile
             if not vrt_path.is_file():
                 raise RuntimeError("No se encontró la fuente de la ortofoto")
@@ -218,7 +263,7 @@ class DynamicTileRenderer:
                                                 timeout=self.settings.dynamic_tile_timeout_seconds, env=qgis_environment(self.settings))
                         if result.returncode != 0:
                             raise RuntimeError(f"gdal_translate: {result.stderr.strip() or result.stdout.strip()}")
-                if not _is_png(temporary):
+                if not is_cached_tile(temporary):
                     raise RuntimeError("GDAL no produjo una tesela PNG válida")
                 os.replace(temporary, tile)
                 return tile

@@ -25,7 +25,7 @@ from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
 from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
 from .importer import normalize_phone, parse_coordinates, validate_import
-from .tile_rendering import DynamicTileRenderer, tile_cache_path, tile_intersects_window, window_bounds_wgs84
+from .tile_rendering import DynamicTileRenderer, TileQueueFull, is_cached_tile, tile_cache_path, tile_intersects_window, window_bounds_wgs84
 from .models import (
     Admin,
     AuditLog,
@@ -406,7 +406,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         return response
 
     @app.get("/health")
-    def health() -> dict:
+    async def health() -> dict:
         return {"status": "ok", "version": __version__}
 
     @app.get("/ready")
@@ -1064,11 +1064,10 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         return render(request, "public_success.html", {"person": link.person, "version": link.person.drawing_version or None})
 
     @app.get("/p/{token}/tiles/{z}/{x}/{y}.png")
-    def private_tile(token: str, z: int, x: int, y: int, request: Request, db: Session = Depends(get_db)) -> Response:
+    async def private_tile(token: str, z: int, x: int, y: int, request: Request, db: Session = Depends(get_db)) -> Response:
         link = find_public_link(db, token, settings)
         if not link or not link.person.active:
             raise HTTPException(404)
-        rate_limiter.check(f"tile:{token}:{ip_fingerprint(request, settings)}", 600, 60)
         window = db.get(TileWindow, link.person_id)
         if not window or window.status != "LISTO" or not window.relative_dir:
             raise HTTPException(404)
@@ -1090,11 +1089,20 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 raise HTTPException(503, "No se encontró la máscara del área autorizada")
             try:
                 base.relative_to(root)
-                tile = request.app.state.tile_renderer.render(base / "source.vrt", tile, z, x, y)
             except ValueError:
                 raise HTTPException(404)
+            # Authorization is checked on every delivery, including cache hits.
+            # Release the read transaction before waiting for any raster work.
+            db.close()
+            if is_cached_tile(tile):
+                return FileResponse(tile, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
+            rate_limiter.check(f"tile:{token}:{ip_fingerprint(request, settings)}", 600, 60)
+            try:
+                tile = await request.app.state.tile_renderer.render_async(base / "source.vrt", tile, z, x, y)
+            except TileQueueFull as exc:
+                raise HTTPException(503, "La imagen se está preparando; intente de nuevo en unos segundos", headers={"Retry-After": "1"}) from exc
             except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
-                raise HTTPException(503, "La imagen se está preparando; intente de nuevo en unos segundos") from exc
+                raise HTTPException(503, "La imagen se está preparando; intente de nuevo en unos segundos", headers={"Retry-After": "2"}) from exc
             return FileResponse(tile, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
         base = (settings.data_dir / "tiles" / window.relative_dir).resolve()
         tile = (base / str(z) / str(x) / f"{y}.png").resolve()
@@ -1104,6 +1112,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             raise HTTPException(404)
         if not tile.is_file():
             raise HTTPException(404)
+        db.close()
         return FileResponse(tile, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
 
     return app

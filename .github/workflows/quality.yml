@@ -14,8 +14,8 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements.lock
-      - run: python -m pip install -r requirements.lock pip-audit==2.9.0 ruff==0.13.2
-      - run: ruff check app tests
-      - run: python -m pytest -q --ignore=tests/e2e
-      - run: pip-audit -r requirements.lock
+          cache-dependency-path: |
+            requirements.lock
+            requirements-quality.txt
+      - name: Verificar calidad
+        run: .\scripts\VERIFICAR_CALIDAD.ps1 -Python python -InstallDependencies

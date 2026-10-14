@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from .gis import metres_bounds, tile_xy
 from .tile_rendering import COLOMBIA_TO_WEB_MERCATOR, WEB_MERCATOR_LIMIT, DynamicTileRenderer, tile_cache_path

@@ -26,7 +26,7 @@
     maxBounds: imageBounds,
     maxBoundsViscosity: 1,
     zoomSnap: 1,
-    zoomAnimation: false,
+    zoomAnimation: true,
     fadeAnimation: false,
   });
   const overviewMinZoom = Math.floor(map.getBoundsZoom(allowedBounds, false));
@@ -34,11 +34,13 @@
   map.setMaxZoom(displayMaxZoom);
   map.fitBounds(allowedBounds, { padding: [20, 20], maxZoom: Math.min(16, nativeMaxZoom) });
   mapNode.dataset.minDisplayZoom = String(map.getMinZoom());
+  const urlFor = ([z, x, y]) => `/p/${encodeURIComponent(token)}/tiles/${z}/${x}/${y}.png?v=${encodeURIComponent(imageVersion)}`;
+  const imageCache = new PrediosImagery.ImageCache(urlFor, nativeMinZoom);
   let imageLayer = null;
   let failedTiles = 0;
   let mapReady = false;
   if (mapNode.dataset.window === 'LISTO') {
-    imageLayer = L.tileLayer(`/p/${encodeURIComponent(token)}/tiles/{z}/{x}/{y}.png?v=${encodeURIComponent(imageVersion)}`, {
+    imageLayer = new PrediosImagery.CanvasTiles(imageCache, {
       minZoom: nativeMinZoom,
       maxZoom: displayMaxZoom,
       maxNativeZoom: nativeMaxZoom,
@@ -46,7 +48,8 @@
       bounds: imageBounds,
       keepBuffer: 3,
       updateWhenZooming: false,
-      updateWhenIdle: true,
+      updateWhenIdle: false,
+      updateInterval: 120,
     });
     const status = document.getElementById('mapStatus');
     const statusText = document.getElementById('mapStatusText');
@@ -264,30 +267,13 @@
   const loader = document.getElementById('imageLoader');
   const loadMessage = document.getElementById('imageLoadMessage');
   const retryInitial = document.getElementById('retryInitial');
-  const preloaded = new Map();
-  const urlFor = ([z, x, y]) => `/p/${encodeURIComponent(token)}/tiles/${z}/${x}/${y}.png?v=${encodeURIComponent(imageVersion)}`;
-  const loadImage = coordinates => {
-    const url = urlFor(coordinates);
-    if (preloaded.has(url)) return preloaded.get(url);
-    const promise = new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = async () => {
-        try { if (image.decode) await image.decode(); resolve(image); }
-        catch (error) { reject(error); }
-      };
-      image.onerror = () => reject(new Error('No se pudo cargar una zona de la imagen.'));
-      image.src = url;
-    });
-    preloaded.set(url, promise);
-    promise.catch(() => preloaded.delete(url));
-    while (preloaded.size > 256) preloaded.delete(preloaded.keys().next().value);
-    return promise;
-  };
-  const preloadBatch = async (tiles, progress) => {
+  const loadImage = (coordinates, priority = 1) => imageCache.load(coordinates, priority);
+  const preloadBatch = async (tiles, progress, isCurrent = () => true) => {
     let next = 0;
     let completed = 0;
     const results = await Promise.allSettled(Array.from({ length: Math.min(6, tiles.length) }, async () => {
       while (next < tiles.length) {
+        if (!isCurrent()) return;
         const coordinates = tiles[next++];
         await loadImage(coordinates);
         completed += 1;
@@ -321,18 +307,28 @@
     confirmButton.disabled = !ready || !activeLayer;
   };
   let initializing = false;
+  const getManifest = async () => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(`/p/${encodeURIComponent(token)}/preload`, { credentials: 'same-origin', signal: controller.signal });
+      if (!response.ok && response.status !== 404) throw new Error('La imagen todavía no está disponible.');
+      // The previous server can still be serving during an application restart.
+      return response.status === 404
+        ? { tiles: Array.from({ length: nativeMaxZoom - nativeMinZoom + 1 }, (_, index) => viewportTiles(nativeMinZoom + index)).flat() }
+        : await response.json();
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('El servidor está tardando demasiado en responder.');
+      throw error;
+    } finally { clearTimeout(timer); }
+  };
   const prepareImages = async () => {
     if (initializing) return;
     initializing = true;
     retryInitial.hidden = true;
     setReady(false);
     try {
-      const response = await fetch(`/p/${encodeURIComponent(token)}/preload`, { credentials: 'same-origin' });
-      if (!response.ok && response.status !== 404) throw new Error('La imagen todavía no está disponible.');
-      // The previous server can still be serving during an application restart.
-      const manifest = response.status === 404
-        ? { tiles: Array.from({ length: nativeMaxZoom - nativeMinZoom + 1 }, (_, index) => viewportTiles(nativeMinZoom + index)).flat() }
-        : await response.json();
+      const manifest = await getManifest();
       const tiles = [...new Map([...viewportTiles(Math.round(map.getZoom())), ...manifest.tiles].map(tile => [tile.join('/'), tile])).values()];
       await preloadBatch(tiles, (done, total) => { loadMessage.textContent = `Cargando imagen y niveles de zoom… ${Math.round(done * 100 / total)}%`; });
       await new Promise((resolve, reject) => {
@@ -351,14 +347,24 @@
   setReady(false);
   prepareImages();
   let prefetchTimer;
+  let prefetchVersion = 0;
+  map.on('movestart zoomstart', () => {
+    prefetchVersion += 1;
+    if (mapReady) imageCache.cancelPrefetch();
+    clearTimeout(prefetchTimer);
+  });
   map.on('moveend zoomend', () => {
     if (!mapReady) return;
     clearTimeout(prefetchTimer);
+    const version = ++prefetchVersion;
+    const visible = viewportTiles(Math.round(map.getZoom()));
+    imageCache.selectView(visible);
+    imageLayer.refreshVisible(visible);
     prefetchTimer = window.setTimeout(() => {
       const zoom = Math.round(map.getZoom());
-      const levels = [zoom, zoom + 1, zoom - 1].filter(level => level >= nativeMinZoom && level <= nativeMaxZoom);
-      preloadBatch(levels.flatMap(viewportTiles)).catch(() => {});
-    }, 120);
+      const levels = [zoom + 1, zoom - 1].filter(level => level >= nativeMinZoom && level <= nativeMaxZoom);
+      preloadBatch(levels.flatMap(viewportTiles), null, () => version === prefetchVersion).catch(() => {});
+    }, 250);
   });
   window.addEventListener('orientationchange', () => window.setTimeout(() => map.invalidateSize(), 250));
 })();

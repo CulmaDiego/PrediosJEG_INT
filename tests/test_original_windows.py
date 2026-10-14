@@ -85,7 +85,8 @@ def test_recovery_queues_failed_images_once_and_preserves_drawings(test_app):
         person = db.get(Person, person_id)
         person.orthophoto_status = 'ERROR'
         protected = Person(name='Respondió', phone='3009876543', municipality_id=person.municipality_id, reference_lon=-75.031, reference_lat=6.294, status='RESPONDIO', drawing_version=1, orthophoto_status='ERROR')
-        db.add(protected);db.commit()
+        db.add(protected)
+        db.commit()
         protected_id = protected.id
     assert retry_failed_images(app.state.settings) == 0
     assert retry_failed_images(app.state.settings) == 0
@@ -142,7 +143,8 @@ def test_preload_manifest_and_cached_tiles_still_require_a_valid_link(test_app, 
     with app.state.Session() as db:
         from app.models import PublicLink, utcnow
         link = db.scalar(select(PublicLink).where(PublicLink.person_id == person_id))
-        link.revoked_at = utcnow(); db.commit()
+        link.revoked_at = utcnow()
+        db.commit()
     assert client.get(f'/p/{token}/preload').status_code == 404
     assert client.get(f'/p/{token}/tiles/20/{x}/{y}.png').status_code == 404
 
@@ -183,7 +185,8 @@ for name,size,res,value in [('rural',2000,1,50),('urban',2000,0.1,200)]:
         for name, res, radius in [('rural',1,1000),('urban',0.1,100)]:
             db.add(OrthophotoSource(relative_path=f'{name}.tif', municipality_id=person.municipality_id, crs='EPSG:9377', resolution_x=res, resolution_y=res, bounds_json=json.dumps(metres_bounds(person.reference_lon, person.reference_lat, radius)), status='LISTO'))
         job = Job(job_type='PREPARE_WINDOW', payload_json=json.dumps({'person_id':person_id}), status='EJECUTANDO')
-        db.add(job);db.commit()
+        db.add(job)
+        db.commit()
         prepare_window(db, app.state.settings, job, person_id, 350)
         db.expire_all()
         window=db.get(TileWindow,person_id)
