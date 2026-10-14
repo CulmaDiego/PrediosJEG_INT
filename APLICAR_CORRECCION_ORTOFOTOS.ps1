@@ -1,4 +1,7 @@
-param([string]$EnvFile = 'D:\PrediosRemotos\datos\config\production.env')
+param(
+    [string]$EnvFile = 'D:\PrediosRemotos\datos\config\production.env',
+    [switch]$SoloReiniciar
+)
 $ErrorActionPreference = 'Stop'
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -27,12 +30,15 @@ function Start-App([string]$kind) {
     }
 }
 
-$backup = Join-Path $env:PREDIOS_DATA_DIR ('backups\antes-ortofoto-original-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-& $python -m app.cli backup --destination $backup
-Assert-Exit 'Crear respaldo'
-& $python -m app.cli verify-backup --source $backup
-Assert-Exit 'Verificar respaldo'
-Write-Host "Respaldo verificado: $backup"
+$backup = 'No requerido para reiniciar procesos'
+if (-not $SoloReiniciar) {
+    $backup = Join-Path $env:PREDIOS_DATA_DIR ('backups\antes-ortofoto-original-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    & $python -m app.cli backup --destination $backup
+    Assert-Exit 'Crear respaldo'
+    & $python -m app.cli verify-backup --source $backup
+    Assert-Exit 'Verificar respaldo'
+    Write-Host "Respaldo verificado: $backup"
+}
 
 # Stop only this checkout's web and worker, including Python launcher children.
 $processes = @(Get-CimInstance Win32_Process)
@@ -54,22 +60,23 @@ $listener = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction Sile
 if ($listener -and -not $targetIds.Contains([int]$listener.OwningProcess)) {
     throw 'El puerto 8000 pertenece a un proceso que no se pudo identificar como esta aplicación. No se detuvo.'
 }
-foreach ($kind in 'Web','Worker') {
-    $task = Get-ScheduledTask -TaskName "PrediosRemotos-$kind" -ErrorAction SilentlyContinue
-    if ($task) { Stop-ScheduledTask -TaskName $task.TaskName }
-}
-foreach ($processId in $targetIds) {
-    $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-    if ($process) { Stop-Process -InputObject $process -Force }
-}
 try {
-    & $python -m app.cli retry-failed-images
-    Assert-Exit 'Volver a preparar imágenes fallidas'
-    & $python -m app.cli warm-images
-    Assert-Exit 'Preparar imagen y niveles de zoom'
+    foreach ($kind in 'Web','Worker') {
+        $task = Get-ScheduledTask -TaskName "PrediosRemotos-$kind" -ErrorAction SilentlyContinue
+        if ($task) { Stop-ScheduledTask -TaskName $task.TaskName }
+    }
+    foreach ($processId in $targetIds) {
+        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        if ($process) { Stop-Process -InputObject $process -Force }
+    }
+    if (-not $SoloReiniciar) {
+        & $python -m app.cli retry-failed-images
+        Assert-Exit 'Volver a preparar imágenes fallidas'
+        & $python -m app.cli warm-images
+        Assert-Exit 'Preparar imagen y niveles de zoom'
+    }
 } finally {
-    Start-App 'Worker'
-    Start-App 'Web'
+    try { Start-App 'Worker' } finally { Start-App 'Web' }
 }
 $ready = $false
 for ($attempt = 0; $attempt -lt 15; $attempt++) {
@@ -81,4 +88,4 @@ for ($attempt = 0; $attempt -lt 15; $attempt++) {
     } catch { }
 }
 if (-not $ready) { throw "No se confirmó el inicio de la aplicación. Respaldo: $backup" }
-Write-Host 'Corrección activada. La web está disponible y el trabajador recuperará las imágenes fallidas.' -ForegroundColor Green
+Write-Host 'Aplicativo reiniciado. Web y trabajador disponibles.' -ForegroundColor Green
