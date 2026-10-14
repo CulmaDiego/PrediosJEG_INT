@@ -184,7 +184,7 @@
   };
   const simplifyFreehand = points => {
     const simplified = simplifyLatLngs(points);
-    if (simplified.length > 3 && map.latLngToContainerPoint(simplified[0]).distanceTo(map.latLngToContainerPoint(simplified[simplified.length - 1])) <= freehandClosePixels) simplified.pop();
+    if (simplified.length > 3 && map.latLngToContainerPoint(simplified[0]).distanceTo(map.latLngToContainerPoint(simplified[simplified.length - 1])) <= 2) simplified.pop();
     return simplified;
   };
   const finishFreehand = (event, closedAtStart = false) => {

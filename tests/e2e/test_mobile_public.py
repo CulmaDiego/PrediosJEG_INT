@@ -164,6 +164,12 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     page.mouse.up()
                     curved = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
                     assert 13 < len(curved['coordinates'][0]) <= 41
+                    closure_gap = page.evaluate('''ring => {
+                      const start = L.CRS.EPSG3857.latLngToPoint(L.latLng(ring[0][1], ring[0][0]), 18);
+                      const end = ring[ring.length - 2];
+                      return start.distanceTo(L.CRS.EPSG3857.latLngToPoint(L.latLng(end[1], end[0]), 18));
+                    }''', curved['coordinates'][0])
+                    assert closure_gap <= 22.1
                     # Reloading must keep every freehand vertex already chosen,
                     # rather than simplifying it again at a different zoom.
                     page.reload(wait_until='networkidle')

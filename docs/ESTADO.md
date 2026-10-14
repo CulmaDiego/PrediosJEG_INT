@@ -88,3 +88,5 @@ Producción no se considera lista hasta completar los dos puntos manuales pendie
 - Verificación final de esta actualización: 45 pruebas pasaron, incluida la comprobación de conservación de vértices, curvas a mano, precarga autenticada y navegación móvil.
 
 - Compatibilidad durante la actualización: la plantilla acepta el servidor anterior y precarga sus vistas de zoom cuando el endpoint nuevo aún no existe; la página productiva se verificó con HTTP 200. Windows reportó cancelada la elevación para reiniciar los procesos actuales, por lo que el reinicio de los lectores persistentes queda pendiente.
+
+- Aplicación activa: precarga de 198 teselas completada en la ventana actual, navegador listo en 1,69 s y zoom 20 sin fallos de imagen ni JavaScript. Se conservó el último punto distinto del trazo a mano en el cierre, comprobado en navegador. Respaldo completo antes-precarga-20261014-f030efc creado y verificado con SQLite íntegra.
