@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-Fecha de actualización: 2026-10-13.
+Fecha de actualización: 2026-10-14.
 
 ## Etapa 1 — Base local y seguridad
 
@@ -26,7 +26,7 @@ Fecha de actualización: 2026-10-13.
 
 - [x] Token aleatorio de 256 bits almacenado solo como hash, expiración y revocación.
 - [x] Mapa móvil vertical/horizontal, dibujo por puntos y a mano alzada, edición, borrado, deshacer y confirmación.
-- [x] Alejamiento hasta encuadrar completo el radio permitido y sobrezoom hasta nivel 24 reutilizando la última tesela nativa, con desplazamiento confinado al recorte de ortofoto.
+- [x] Alejamiento hasta encuadrar completo el radio permitido; zoom máximo calculado según la resolución real de la ortofoto y desplazamiento limitado a su área autorizada.
 - [x] Ortofoto sin capa translúcida y pantalla final de “Respuesta recibida” después de cada envío.
 - [x] Ortofoto realzada sin velos de relleno; el dibujo a mano muestra el trazo en vivo, se cierra al regresar al inicio y simplifica automáticamente los vértices para facilitar la edición.
 - [x] Identidad visual actualizada con la paleta institucional `#096e74`, `#44bec6`, `#bcd3d8`, `#7e9cac`, `#162f3e`, `#35596b`, `#949cac`, `#96a4ac`, `#61808e` y `#4c6674`.
@@ -35,7 +35,7 @@ Fecha de actualización: 2026-10-13.
 - [x] Validación Polygon WGS84, 3–100 vértices, cierre, autointersección, área y distancia máxima.
 - [x] Versiones inmutables y una sola vigente.
 - [ ] Revisión táctil manual en teléfono físico. No se afirma completada porque no hubo un dispositivo físico disponible en esta sesión.
-- Verificación: Playwright + Chrome a 320, 375 y 430 px; carga de tesela privada, encuadre completo del radio permitido, sobrezoom hasta nivel 24 sin perder la imagen, desplazamiento limitado, dibujo a mano alzada, edición, confirmación, fallo de red y reintento. También se comprobó horizontal a 667 × 375 px.
+- Verificación: Playwright + Edge a 320, 375 y 430 px; carga de tesela privada, encuadre completo del radio permitido, zoom limitado al detalle real, desplazamiento limitado, dibujo a mano alzada, edición, confirmación, fallo de red y reintento. También se comprobó horizontal a 667 × 375 px.
 
 ## Etapa 4 — Ortofotos, trabajos y reportes
 
@@ -62,3 +62,27 @@ Fecha de actualización: 2026-10-13.
 - [ ] Ensayo en el PC de empresa: instalación inicial, actualización desde una etiqueta real, restauración y flujo público completo.
 
 Producción no se considera lista hasta completar los dos puntos manuales pendientes: teléfono físico y ensayo real en el PC de empresa.
+
+## Corrección de ortofotos originales — 2026-10-14
+
+- [x] Eliminada la inserción duplicada de TileWindow al preparar por primera vez; actualización SQLite atómica y regeneración sin duplicados.
+- [x] Fuentes originales completas, referencias RGB sin remuestreo previo y lectura de las teselas visibles con GDAL de QGIS.
+- [x] Fuentes superpuestas ordenadas por resolución, con cobertura rural y detalle urbano; selección exige cobertura del punto de referencia.
+- [x] Máscara circular en el servidor: RGB y alfa se borran fuera del radio EPSG:9377. Prueba con GDAL real verifica transparencia, eliminación de RGB y detalle de ambas fuentes.
+- [x] Verificación de imagen válida en el punto antes de habilitar la ventana; máscaras ausentes bloquean el acceso.
+- [x] Zoom máximo calculado a partir de metros por píxel; control de carga y botón Reintentar, y caché del navegador diferenciada por generación.
+- [x] Script APLICAR_CORRECCION_ORTOFOTOS.ps1 con respaldo, identificación de procesos del checkout, reinicio y reintento de imágenes fallidas; conserva enlaces y dibujos enviados.
+- Verificación: 43 pruebas pasaron, incluido navegador Edge en tamaños móviles. Prueba aislada con una copia de la base real y el ECW rural de San Carlos: ventana LISTO con radio 10.000 m y zoom 12–20; página y teselas HTTP 200, petición fuera de área HTTP 404. No se alteraron la base productiva ni las ortofotos originales.
+- [ ] Activar en la instancia actual: Windows denegó detener el proceso web 8180 porque se ejecuta elevado. Ejecutar el script desde PowerShell como administrador.
+
+## Precarga, zoom y dibujo — 2026-10-14
+
+- [x] Preparación de cobertura general y zona central en todos los niveles antes de habilitar nuevos enlaces. Precarga limitada por nivel para mantener viable un radio grande.
+- [x] Lectores GDAL persistentes, caché de fuentes limitada, cierre en el ciclo de vida del servidor y exclusión por grupos de teselas con memoria acotada.
+- [x] El navegador descarga y decodifica la precarga antes de habilitar el mapa, con progreso y reintento; anticipa el zoom cercano durante la navegación. Las áreas lejanas nuevas conservan carga bajo demanda.
+- [x] Zoom en niveles enteros, sin animaciones intermedias de carga; límites de imagen calculados en el servidor con la misma proyección que valida las teselas.
+- [x] Polígono por puntos, borradores, ediciones y deshacer conservan sus vértices y precisión. Solo la finalización a mano reduce puntos, con hasta 40 vértices y tolerancia adaptativa para curvas.
+- [x] Aplicación de cambios mediante cierre y reinicio exclusivamente de web/trabajador y sus lectores, con respaldo y precarga de ventanas actuales.
+- Evidencia local aislada con ECW real y radio 5.000 m: 198 teselas preparadas en 39,64 s antes de habilitar; navegador móvil listo en 2,25 s, ocho acercamientos hasta zoom 20 entre 0,12 y 0,16 s cada uno, cero errores HTTP de imágenes y cero errores JavaScript. Estas medidas corresponden a este PC y conexión local.
+
+- Verificación final de esta actualización: 45 pruebas pasaron, incluida la comprobación de conservación de vértices, curvas a mano, precarga autenticada y navegación móvil.

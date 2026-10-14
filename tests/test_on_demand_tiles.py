@@ -46,7 +46,7 @@ def test_on_demand_window_is_ready_without_a_prebuilt_pyramid(test_app, monkeypa
     monkeypatch.setattr(app.state.tile_renderer, "render", render)
     page = client.get(f"/p/{token}")
     assert page.status_code == 200
-    assert "las zonas se cargan al navegar" in page.text
+    assert "Ortofoto lista" in page.text
 
     x, y = tile_xy(lon, lat, 12)
     tile = client.get(f"/p/{token}/tiles/12/{x}/{y}.png")

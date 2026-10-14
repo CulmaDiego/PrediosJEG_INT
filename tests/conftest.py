@@ -51,6 +51,7 @@ def test_app(tmp_path: Path):
         db.commit()
         person_id = person.id
     yield app, TestClient(app), raw_token, person_id
+    app.state.tile_renderer.close()
 
 
 def login(client: TestClient) -> str:

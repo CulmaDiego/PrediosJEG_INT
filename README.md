@@ -85,13 +85,13 @@ Una migración irreversible no se “deshace” con una promesa automática. La 
 
 El catálogo usa `gdalinfo` sin cargar rásteres completos. El radio inicial de la ventana es 2000 m, pero el administrador puede cambiarlo en **Configuración de teselas** entre 100 y 50.000 m. El valor se guarda en la base de datos y se aplica a cada persona nueva y a las regeneraciones posteriores; las ventanas existentes y las personas que ya enviaron su dibujo se conservan.
 
-La preparación ya no crea una pirámide completa de PNG por persona. El trabajador genera primero un VRT privado recortado de la ortofoto, que normalmente tarda solo segundos, y marca el enlace como listo. Cuando la persona abre, aleja o acerca el mapa, el servidor crea únicamente las teselas visibles y las guarda en caché para las siguientes visitas. Así un radio grande no bloquea la cola por decenas de miles de imágenes que nadie verá. Cada petición vuelve a validar el enlace de esa persona.
+La aplicación conserva las ortofotos completas en su formato y resolución originales. La preparación crea referencias privadas a sus bandas RGB, sin recortar, reproyectar ni reducir los originales, y verifica una tesela en el punto de referencia antes de habilitar el enlace. El servidor lee solo las zonas visibles, prioriza la fuente de mayor resolución cuando se superponen y guarda PNG sin pérdida en una caché por ventana. Cada tesela lleva una máscara circular; los píxeles fuera del radio autorizado se borran en RGB y transparencia en el servidor. Antes de habilitar el enlace, el trabajador prepara la cobertura general y una zona cercana al punto en cada nivel de zoom. Al abrir el mapa, el navegador descarga y decodifica esa precarga antes de habilitar las herramientas; también adelanta las vistas de zoom cercanas al navegar. Los lectores GDAL permanecen abiertos con memoria limitada para cargar otras zonas sin iniciar un proceso por tesela. Cada petición valida el enlace, y el zoom máximo se calcula a partir de la resolución real de la fuente. Las ventanas anteriores siguen siendo compatibles; regenerarlas activa el modo ORIGINAL.
 
 Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces incluye las personas cuya fuente privada esté lista; las teselas detalladas se completan bajo demanda.
 
 Desde **Personas → Informe de seguimiento** se descarga un Excel con resumen de respuestas, aperturas, pendientes y estado de imágenes, más una hoja detallada por persona. El mismo informe puede limitarse a un municipio.
 
-La interfaz administrativa y el flujo público incorporan la identidad visual de **Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración**. El isotipo se presenta sin deformación junto al nombre legible en escritorio, celular, acceso administrativo y mensajes públicos. En el mapa, el usuario puede alejarse hasta encuadrar completo el radio permitido y acercarse hasta el nivel 24.
+La interfaz administrativa y el flujo público incorporan la identidad visual de **Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración**. El isotipo se presenta sin deformación junto al nombre legible en escritorio, celular, acceso administrativo y mensajes públicos. En el mapa, el usuario puede alejarse hasta encuadrar completo el radio permitido y acercarse hasta el nivel correspondiente a la resolución de la ortofoto.
 
 La interfaz fija Leaflet 1.9.4 y Leaflet-Geoman 2.18.3. Ambos ya están incluidos en el repositorio; el instalador configura `PREDIOS_ASSET_MODE=local`, sin depender del CDN. El inventario real está en [docs/ORTOFOTOS.md](docs/ORTOFOTOS.md).
 
@@ -116,3 +116,15 @@ No ponga bases, Excel reales, teselas, exportaciones, respaldos, logs, secretos 
 El avance y la evidencia de verificación se mantienen en [docs/ESTADO.md](docs/ESTADO.md).
 
 Para instalar o actualizar el PC definitivo, siga la [guía paso a paso de producción](docs/PASO_A_PRODUCCION.md).
+
+## Aplicar la corrección de ortofotos en esta instalación
+
+Con el código actualizado, ejecute desde PowerShell **como administrador**:
+
+```powershell
+D:\PrediosRemotos\app\APLICAR_CORRECCION_ORTOFOTOS.ps1
+```
+
+El script respalda y verifica los datos, identifica los procesos de este checkout, reinicia web y trabajador y vuelve a agendar las imágenes fallidas. Conserva las URLs y los dibujos enviados. Este permiso de Windows es necesario cuando los procesos actuales se iniciaron como administrador. No descarga código ni cambia los originales.
+
+El dibujo por puntos conserva sus vértices originales (hasta el límite de 100 del servidor), incluso al restaurar el borrador, editar o deshacer. Solo el trazo a mano se simplifica, con tolerancia inicial de 1,25 píxeles y hasta 40 vértices para conservar curvas.

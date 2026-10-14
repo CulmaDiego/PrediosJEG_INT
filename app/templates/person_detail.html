@@ -7,7 +7,7 @@
 <div class="detail-grid">
   <section class="panel">
     <div class="panel-head"><h2>Datos</h2></div>
-    <dl class="facts"><div><dt>Coordenada WGS84</dt><dd>{% if person.reference_lon is not none %}{{ '%.6f'|format(person.reference_lat) }}, {{ '%.6f'|format(person.reference_lon) }}{% else %}Sin coordenada{% endif %}</dd></div><div><dt>Ortofoto</dt><dd>{{ person.orthophoto_status.replace('_',' ') }}{% if person.orthophoto_error %}<small class="error-text">{{ person.orthophoto_error }}</small>{% endif %}</dd></div><div><dt>Radio de teselas</dt><dd>{% if window %}{{ window.radius_m }} m{% else %}Pendiente{% endif %}</dd></div><div><dt>Observación</dt><dd>{{ person.observation or '—' }}</dd></div><div><dt>Último acceso</dt><dd>{{ person.last_opened_at or '—' }}</dd></div><div><dt>Respuesta</dt><dd>{{ person.responded_at or '—' }}</dd></div></dl>
+    <dl class="facts"><div><dt>Coordenada WGS84</dt><dd>{% if person.reference_lon is not none %}{{ '%.6f'|format(person.reference_lat) }}, {{ '%.6f'|format(person.reference_lon) }}{% else %}Sin coordenada{% endif %}</dd></div><div><dt>Ortofoto</dt><dd>{{ person.orthophoto_status.replace('_',' ') }}{% if person.orthophoto_error %}<small class="error-text">{{ person.orthophoto_error }}</small>{% endif %}</dd></div><div><dt>Fuente original</dt><dd>{% if window and window.source %}{{ window.source.relative_path }}<small>{{ window.source.crs }} · {{ window.source.resolution_x }} × {{ window.source.resolution_y }} unidades/píxel</small>{% else %}Pendiente{% endif %}</dd></div><div><dt>Radio autorizado</dt><dd>{% if window %}{{ window.radius_m }} m{% else %}Pendiente{% endif %}</dd></div><div><dt>Observación</dt><dd>{{ person.observation or '—' }}</dd></div><div><dt>Último acceso</dt><dd>{{ person.last_opened_at or '—' }}</dd></div><div><dt>Respuesta</dt><dd>{{ person.responded_at or '—' }}</dd></div></dl>
     <div class="link-copy-zone">
       <label>Enlace de la persona</label>
       <div class="copy-row"><input id="personPublicUrl" value="{{ public_url }}" readonly><button class="button secondary" type="button" data-copy-target="#personPublicUrl">Copiar enlace</button></div>
@@ -15,7 +15,7 @@
     </div>
     <form method="post" action="/admin/personas/{{ person.id }}/preparar-teselas" class="action-zone">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
-      <p>Genera nuevamente la ventana con el radio configurado y comprueba que existan teselas PNG en el punto de referencia.</p>
+      <p>Habilita el radio configurado sobre la ortofoto original y verifica la imagen en el punto de referencia.</p>
       <button class="button secondary" type="submit" {% if person.reference_lon is none or person.drawing_version %}disabled{% endif %}>Generar y verificar teselas</button>{% if person.drawing_version %}<p class="hint">Esta persona ya envió su dibujo; sus teselas se conservan.</p>{% endif %}
     </form>
     <form method="post" action="/admin/personas/{{ person.id }}/reiniciar" class="danger-zone">

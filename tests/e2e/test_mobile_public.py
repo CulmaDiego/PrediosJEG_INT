@@ -15,10 +15,13 @@ from app.config import Settings
 from app.main import create_app
 from app.models import Municipality, Person, PublicLink, TileWindow
 from app.security import sha256
+from app.tile_preparation import preload_tiles
+import json
 
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
 CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+EDGE = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
 
 
 def tile_xy(lon: float, lat: float, zoom: int) -> tuple[int, int]:
@@ -28,8 +31,9 @@ def tile_xy(lon: float, lat: float, zoom: int) -> tuple[int, int]:
 
 @pytest.mark.e2e
 def test_public_mobile_map_at_required_widths(tmp_path: Path):
-    if not CHROME.exists():
-        pytest.skip("Google Chrome no está instalado")
+    browser_executable = CHROME if CHROME.exists() else EDGE
+    if not browser_executable.exists():
+        pytest.skip("No se encontró Chrome o Edge para la prueba de navegador")
     data = tmp_path / "data"
     orthos = tmp_path / "orthos"
     orthos.mkdir()
@@ -66,11 +70,14 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
             path = data / "tiles" / "e2e" / "18" / str(tile_x) / f"{tile_y}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(PNG)
-    for zoom in range(15, 18):
+    for zoom in range(15, 19):
         center_x, center_y = tile_xy(lon, lat, zoom)
-        path = data / "tiles" / "e2e" / str(zoom) / str(center_x) / f"{center_y}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(PNG)
+        for tile_x in range(center_x - 3, center_x + 4):
+            for tile_y in range(center_y - 3, center_y + 4):
+                path = data / "tiles" / "e2e" / str(zoom) / str(tile_x) / f"{tile_y}.png"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(PNG)
+    (data / 'tiles/e2e/preload.json').write_text(json.dumps({'tiles': preload_tiles(lon, lat, 350, 15, 18)}))
 
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -86,12 +93,14 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
 
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(executable_path=str(CHROME), headless=True)
+            browser = playwright.chromium.launch(executable_path=str(browser_executable), headless=True)
             for width in (320, 375, 430):
                 page = browser.new_page(viewport={"width": width, "height": 760})
                 tile_ok = []
                 page.on("response", lambda response: tile_ok.append(response.status) if "/tiles/" in response.url else None)
                 page.goto(f"http://127.0.0.1:{port}/p/{token}", wait_until="networkidle")
+                expect(page.locator('#map')).to_have_attribute('data-image-ready', 'true')
+                expect(page.locator('#imageLoader')).to_be_hidden()
                 page.wait_for_selector(".leaflet-map-pane", state="attached")
                 expect(page.locator(".public-header .brand-symbol img")).to_be_visible()
                 assert page.locator(".public-header .brand-symbol img").evaluate("image => image.complete && image.naturalWidth > 0")
@@ -111,7 +120,7 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     )
                     page.reload(wait_until="networkidle")
                     migrated = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
-                    assert 4 <= len(migrated["coordinates"][0]) <= 13
+                    assert migrated['coordinates'][0] == dense_ring
                     minimum_zoom = float(page.locator("#map").get_attribute("data-min-display-zoom"))
                     zoom_out = page.locator(".leaflet-control-zoom-out")
                     while float(page.locator("#map").get_attribute("data-zoom")) > minimum_zoom:
@@ -130,17 +139,36 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     assert radius_box["x"] + radius_box["width"] <= map_box["x"] + map_box["width"]
                     assert radius_box["y"] + radius_box["height"] <= map_box["y"] + map_box["height"]
                     zoom_in = page.locator(".leaflet-control-zoom-in")
-                    while float(page.locator("#map").get_attribute("data-zoom")) < 24:
+                    while float(page.locator("#map").get_attribute("data-zoom")) < 18:
                         previous_zoom = float(page.locator("#map").get_attribute("data-zoom"))
                         zoom_in.click()
                         page.wait_for_function(
                             "previous => Number(document.getElementById('map').dataset.zoom) > previous",
                             arg=previous_zoom,
                         )
-                    expect(page.locator("#map")).to_have_attribute("data-zoom", "24")
+                    expect(page.locator("#map")).to_have_attribute("data-zoom", "18")
                     assert page.locator(".leaflet-tile-loaded").count() > 0
+                    expect(page.locator('#mapStatus')).to_have_attribute('data-errors', '0')
                     map_box = page.locator("#map").bounding_box()
                     assert map_box
+                    page.locator('[data-tool="freehand"]').click()
+                    center = (180, 240)
+                    curve = [(center[0] + 70 * math.cos(index * math.tau / 120), center[1] + 70 * math.sin(index * math.tau / 120)) for index in range(121)]
+                    page.mouse.move(map_box['x'] + curve[0][0], map_box['y'] + curve[0][1])
+                    page.mouse.down()
+                    for px, py in curve[1:]:
+                        page.mouse.move(map_box['x'] + px, map_box['y'] + py)
+                    page.mouse.up()
+                    curved = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert 13 < len(curved['coordinates'][0]) <= 41
+                    # Reloading must keep every freehand vertex already chosen,
+                    # rather than simplifying it again at a different zoom.
+                    page.reload(wait_until='networkidle')
+                    restored = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
+                    assert restored == curved
+                    while float(page.locator('#map').get_attribute('data-zoom')) < 18:
+                        page.locator('.leaflet-control-zoom-in').click()
+                    map_box = page.locator('#map').bounding_box()
                     page.locator('[data-tool="freehand"]').click()
                     points = [(150, 180), (215, 180), (215, 245), (150, 245), (150, 180)]
                     page.mouse.move(map_box["x"] + points[0][0], map_box["y"] + points[0][1])
@@ -153,7 +181,7 @@ def test_public_mobile_map_at_required_widths(tmp_path: Path):
                     assert page.locator("#confirmButton").is_enabled()
                     page.mouse.up()
                     draft = page.evaluate(f"JSON.parse(sessionStorage.getItem('predios-remotos-draft-{token[:12]}'))")
-                    assert 4 <= len(draft["coordinates"][0]) <= 13
+                    assert 4 <= len(draft["coordinates"][0]) <= 41
                     expect(page.locator('[data-tool="move"]')).to_have_class("tool active")
                     assert page.locator(".marker-icon").count() == 0
                     page.locator('[data-tool="edit"]').click()

@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import uuid
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
@@ -24,7 +25,7 @@ from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
 from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
 from .importer import normalize_phone, parse_coordinates, validate_import
-from .tile_rendering import DynamicTileRenderer, tile_cache_path, tile_intersects_window
+from .tile_rendering import DynamicTileRenderer, tile_cache_path, tile_intersects_window, window_bounds_wgs84
 from .models import (
     Admin,
     AuditLog,
@@ -134,8 +135,10 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             or window.max_zoom is None
         ):
             continue
-        if window.render_mode == "ON_DEMAND":
-            if (settings.data_dir / "tiles" / window.relative_dir / "source.vrt").is_file():
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
+            base = settings.data_dir / "tiles" / window.relative_dir
+            mask_ready = window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson"))
+            if (base / "source.vrt").is_file() and mask_ready:
                 ready.append(person)
             continue
         try:
@@ -358,7 +361,13 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     engine = build_engine(settings.database_url)
     if create_schema:
         Base.metadata.create_all(engine)
-    app = FastAPI(title="Predios Remotos", docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            app.state.tile_renderer.close()
+    app = FastAPI(title="Predios Remotos", docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
     app.state.Session = build_session_factory(engine)
@@ -982,8 +991,10 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         window = db.get(TileWindow, person.id)
         if not window or window.status != "LISTO" or not window.relative_dir:
             return render(request, "public_preparing.html", {"person": person}, 409)
-        if window.render_mode == "ON_DEMAND":
-            if not (settings.data_dir / "tiles" / window.relative_dir / "source.vrt").is_file():
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
+            base = settings.data_dir / "tiles" / window.relative_dir
+            mask_ready = window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson"))
+            if not (base / "source.vrt").is_file() or not mask_ready:
                 return render(request, "public_preparing.html", {"person": person}, 409)
         else:
             try:
@@ -1002,7 +1013,21 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         _audit(db, request, "ENLACE_ABIERTO", "PUBLICO", person.id)
         db.commit()
         current = db.scalar(select(DrawingVersion).where(DrawingVersion.person_id == person.id, DrawingVersion.is_current.is_(True)))
-        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "map_radius_m": window.radius_m, "current_geometry": current.geometry_json if current else "null"})
+        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "map_radius_m": window.radius_m, "map_bounds": window_bounds_wgs84(person.reference_lon, person.reference_lat, window.radius_m), "current_geometry": current.geometry_json if current else "null"})
+
+    @app.get("/p/{token}/preload")
+    def public_preload(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
+        link = find_public_link(db, token, settings)
+        if not link or not link.person.active:
+            raise HTTPException(404)
+        rate_limiter.check(f"preload:{token}:{ip_fingerprint(request, settings)}", 60, 60)
+        window = db.get(TileWindow, link.person_id)
+        if not window or window.status != "LISTO" or not window.relative_dir:
+            raise HTTPException(409, "La ortofoto todavía se está preparando")
+        base = tile_cache_path(settings, window.relative_dir, 0, 0, 0).parents[2]
+        marker = base / "preload.json"
+        tiles = json.loads(marker.read_text(encoding="utf-8"))["tiles"] if marker.is_file() else []
+        return JSONResponse({"version": window.relative_dir, "tiles": tiles}, headers={"Cache-Control": "no-store"})
 
     @app.post("/p/{token}/submit")
     async def public_submit(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
@@ -1049,7 +1074,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             raise HTTPException(404)
         if window.min_zoom is None or window.max_zoom is None or not window.min_zoom <= z <= window.max_zoom:
             raise HTTPException(404)
-        if window.render_mode == "ON_DEMAND":
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
             person = link.person
             if person.reference_lon is None or person.reference_lat is None:
                 raise HTTPException(404)
@@ -1061,6 +1086,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 raise HTTPException(404)
             base = (settings.data_dir / "tiles" / window.relative_dir).resolve()
             root = (settings.data_dir / "tiles").resolve()
+            if window.render_mode == "ORIGINAL" and not all((base / name).is_file() for name in ("sources.json", "cutline.geojson")):
+                raise HTTPException(503, "No se encontró la máscara del área autorizada")
             try:
                 base.relative_to(root)
                 tile = request.app.state.tile_renderer.render(base / "source.vrt", tile, z, x, y)

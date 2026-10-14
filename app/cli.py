@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 
 from .config import Settings
 from .db import build_engine, build_session_factory
-from .models import Admin
+from .models import Admin, Person, TileWindow
 from .security import hash_password
 
 
@@ -87,12 +87,49 @@ def restore(settings: Settings, source: Path, confirm: str) -> int:
     return 0
 
 
+def retry_failed_images(settings: Settings) -> int:
+    from .main import _queue_tile_jobs, _tile_radius
+
+    factory = build_session_factory(build_engine(settings.database_url))
+    with factory() as db:
+        people = list(db.scalars(select(Person).where(Person.active.is_(True), Person.orthophoto_status == "ERROR")))
+        result = _queue_tile_jobs(db, people, _tile_radius(db, settings))
+        db.commit()
+    print(json.dumps(result))
+    return 0
+
+
+def warm_images(settings: Settings) -> int:
+    from .tile_preparation import warm_window
+    from .tile_rendering import DynamicTileRenderer
+    from .worker import _overview_min_zoom
+    factory = build_session_factory(build_engine(settings.database_url))
+    renderer = DynamicTileRenderer(settings)
+    try:
+        with factory() as db:
+            windows = db.scalars(select(TileWindow).where(TileWindow.status == 'LISTO', TileWindow.render_mode == 'ORIGINAL')).all()
+            for window in windows:
+                person = window.person
+                if not person.active or person.reference_lon is None or person.reference_lat is None:
+                    continue
+                minimum = min(window.min_zoom, _overview_min_zoom(person, window.radius_m, settings))
+                count = warm_window(renderer, window.relative_dir, person.reference_lon, person.reference_lat, window.radius_m, minimum, window.max_zoom)
+                window.min_zoom = minimum
+                db.commit()
+                print(f'Imagen {person.id}: {count} teselas preparadas, zoom {minimum}-{window.max_zoom}', flush=True)
+    finally:
+        renderer.close()
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init-admin")
     init.add_argument("--username", default="admin")
     sub.add_parser("has-admin")
+    sub.add_parser("retry-failed-images")
+    sub.add_parser("warm-images")
     backup_parser = sub.add_parser("backup")
     backup_parser.add_argument("--destination", type=Path, required=True)
     verify = sub.add_parser("verify-backup")
@@ -108,6 +145,10 @@ def main() -> int:
         factory = build_session_factory(build_engine(settings.database_url))
         with factory() as db:
             return 0 if db.scalar(select(func.count()).select_from(Admin)) else 1
+    if args.command == "retry-failed-images":
+        return retry_failed_images(settings)
+    if args.command == "warm-images":
+        return warm_images(settings)
     if args.command == "backup":
         return backup(settings, args.destination.resolve())
     if args.command == "verify-backup":

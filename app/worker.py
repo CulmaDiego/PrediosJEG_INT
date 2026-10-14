@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import socket
@@ -12,11 +13,17 @@ from datetime import timedelta
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.sqlite import insert
+from pyproj import Transformer
+from shapely.geometry import Point, mapping
+from shapely.ops import transform
 
 from .catalog import find_municipality, raster_files, synchronize_municipalities
 from .config import Settings
 from .db import build_engine, build_session_factory
-from .gis import bounds_intersect, inspect_raster, metres_bounds, qgis_environment, qgis_tool, tile_range_for_bounds
+from .gis import WGS84_TO_COLOMBIA, bounds_intersect, inspect_raster, metres_bounds, qgis_environment, qgis_tool, tile_range_for_bounds, tile_xy
+from .tile_rendering import DynamicTileRenderer, native_max_zoom
+from .tile_preparation import warm_window
 from .models import Job, OrthophotoSource, Person, TileConfiguration, TileWindow, utcnow
 
 
@@ -91,9 +98,18 @@ def _overview_min_zoom(person: Person, radius_m: int, settings: Settings) -> int
     """El zoom inicial debe mostrar el predio grande con pocas teselas."""
     for zoom in range(settings.tile_min_zoom, 7, -1):
         min_x, min_y, max_x, max_y = tile_range_for_bounds(person.reference_lon, person.reference_lat, radius_m, zoom)
-        if (max_x - min_x + 1) * (max_y - min_y + 1) <= 16:
+        if (max_x - min_x + 1) * (max_y - min_y + 1) <= 4:
             return zoom
     return 8
+
+
+def _resolution_metres(source: OrthophotoSource, lon: float, lat: float) -> float:
+    if not source.crs or not source.resolution_x or not source.resolution_y:
+        return math.inf
+    x, y = Transformer.from_crs("EPSG:4326", source.crs, always_xy=True).transform(lon, lat)
+    projected = Transformer.from_crs(source.crs, "EPSG:9377", always_xy=True)
+    center = projected.transform(x, y)
+    return max(math.dist(center, projected.transform(x + source.resolution_x, y)), math.dist(center, projected.transform(x, y + source.resolution_y)))
 
 
 def _clear_superseded_tile_failures(db: Session, person: Person, current_job_id: int) -> None:
@@ -124,10 +140,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
     if not person or person.reference_lon is None or person.reference_lat is None:
         raise RuntimeError("La persona no existe o no tiene coordenadas")
     window = db.get(TileWindow, person_id)
-    if window is None:
-        window = TileWindow(person_id=person_id, status="PENDIENTE")
-        db.add(window)
-    previous_dir = window.relative_dir
+    previous_dir = window.relative_dir if window else None
     sources = db.scalars(
         select(
             OrthophotoSource,
@@ -137,59 +150,69 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
         )
     ).all()
     requested_bounds = metres_bounds(person.reference_lon, person.reference_lat, radius_m)
-    source = next((candidate for candidate in sources if candidate.bounds_json and bounds_intersect(json.loads(candidate.bounds_json), requested_bounds)), None)
+    # Catalog bounds are expressed in each raster's CRS, not necessarily 9377.
+    covered = []
+    center_x, center_y = WGS84_TO_COLOMBIA.transform(person.reference_lon, person.reference_lat)
+    for candidate in sources:
+        if not candidate.bounds_json or not candidate.crs:
+            continue
+        projected = Transformer.from_crs(candidate.crs, "EPSG:9377", always_xy=True).transform_bounds(*json.loads(candidate.bounds_json), densify_pts=21)
+        if bounds_intersect(list(projected), requested_bounds):
+            covered.append((candidate, projected))
+    def resolution(candidate):
+        return _resolution_metres(candidate, person.reference_lon, person.reference_lat)
+    centered = [candidate for candidate, bounds in covered if bounds[0] <= center_x <= bounds[2] and bounds[1] <= center_y <= bounds[3]]
+    source = min(centered, key=lambda candidate: (resolution(candidate), candidate.id), default=None)
     if source is None:
+        if window is None:
+            window = TileWindow(person_id=person_id)
+            db.add(window)
         window.status = "SIN_ORTOFOTO"
         window.error = "Ninguna ortofoto asignada cubre la coordenada de referencia"
         person.orthophoto_status = "SIN_ORTOFOTO"
         person.orthophoto_error = window.error
         db.commit()
         return
-    source_path = (settings.orthophoto_root / source.relative_path).resolve()
-    try:
-        source_path.relative_to(settings.orthophoto_root.resolve())
-    except ValueError:
-        raise RuntimeError("La ruta de ortofoto sale de la carpeta permitida")
+    source_id = source.id
+    # Coarse coverage first; sharper originals overlay it without resampling a
+    # municipal mosaic or producing a cropped copy of the raster.
+    ordered = sorted((candidate for candidate, _ in covered), key=lambda candidate: (resolution(candidate), -candidate.id), reverse=True)
     relative_dir = f"person_{person.id}_{uuid.uuid4().hex[:12]}"
     output_dir = settings.data_dir / "tiles" / relative_dir
     output_dir.mkdir(parents=True, exist_ok=False)
     vrt_path = output_dir / "source.vrt"
-    xmin, ymin, xmax, ymax = requested_bounds
     try:
-        warp = subprocess.run(
-            [
-                str(qgis_tool(settings, "gdalwarp")),
-                "-overwrite",
-                "-of",
-                "VRT",
-                "-b",
-                "1",
-                "-b",
-                "2",
-                "-b",
-                "3",
-                "-dstalpha",
-                "-te_srs",
-                "EPSG:9377",
-                "-te",
-                str(xmin),
-                str(ymin),
-                str(xmax),
-                str(ymax),
-                "-t_srs",
-                "EPSG:3857",
-                "-r",
-                "bilinear",
-                str(source_path),
-                str(vrt_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=600,
-            env=qgis_environment(settings),
-        )
-        if warp.returncode != 0 or not vrt_path.is_file():
-            raise RuntimeError(f"gdalwarp: {warp.stderr.strip() or warp.stdout.strip()}")
+        source_names = []
+        for candidate in ordered:
+            source_path = (settings.orthophoto_root / candidate.relative_path).resolve()
+            source_path.relative_to(settings.orthophoto_root.resolve())
+            target = vrt_path if candidate.id == source_id else output_dir / f"source_{candidate.id}.vrt"
+            result = subprocess.run(
+                [str(qgis_tool(settings, "gdal_translate")), "-of", "VRT", "-b", "1", "-b", "2", "-b", "3", str(source_path), str(target)],
+                capture_output=True, text=True, timeout=120, env=qgis_environment(settings),
+            )
+            if result.returncode != 0 or not target.is_file():
+                raise RuntimeError(f"gdal_translate: {result.stderr.strip() or result.stdout.strip()}")
+            source_names.append(target.name)
+        (output_dir / "sources.json").write_text(json.dumps({"sources": source_names, "center": [center_x, center_y], "radius_m": radius_m}), encoding="utf-8")
+        # An inscribed circle keeps every visible pixel inside the authorized
+        # metric radius, including tiles that straddle the boundary.
+        circle = Point(center_x, center_y).buffer(radius_m, quad_segs=128)
+        to_wgs84 = Transformer.from_crs("EPSG:9377", "EPSG:4326", always_xy=True)
+        cutline = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {}, "geometry": mapping(transform(to_wgs84.transform, circle))}]}
+        (output_dir / "cutline.geojson").write_text(json.dumps(cutline), encoding="utf-8")
+        max_zoom = native_max_zoom(person.reference_lat, resolution(source), settings.tile_max_zoom)
+        min_zoom = min(_overview_min_zoom(person, radius_m, settings), max_zoom)
+        x, y = tile_xy(person.reference_lon, person.reference_lat, max_zoom)
+        renderer = DynamicTileRenderer(settings)
+        try:
+            renderer.render(vrt_path, output_dir / str(max_zoom) / str(x) / f"{y}.png", max_zoom, x, y)
+            def progress(done, total):
+                job.progress = 10 + int(80 * done / total)
+                db.commit()
+            warm_window(renderer, relative_dir, person.reference_lon, person.reference_lat, radius_m, min_zoom, max_zoom, progress)
+        finally:
+            renderer.close()
     except Exception:
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
@@ -199,16 +222,9 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
     if person is None or job is None:
         shutil.rmtree(output_dir, ignore_errors=True)
         return
-    window = db.get(TileWindow, person_id) or TileWindow(person_id=person_id)
-    db.add(window)
-    window.source_id = source.id
-    window.relative_dir = relative_dir
-    window.min_zoom = _overview_min_zoom(person, radius_m, settings)
-    window.max_zoom = settings.tile_max_zoom
-    window.radius_m = radius_m
-    window.render_mode = "ON_DEMAND"
-    window.status = "LISTO"
-    window.error = None
+    values = dict(source_id=source_id, relative_dir=relative_dir, min_zoom=min_zoom, max_zoom=max_zoom, radius_m=radius_m, render_mode="ORIGINAL", status="LISTO", error=None, updated_at=utcnow())
+    # Atomic replacement also makes retries safe if two workers finish together.
+    db.execute(insert(TileWindow).values(person_id=person_id, **values).on_conflict_do_update(index_elements=[TileWindow.person_id], set_=values))
     person.orthophoto_status = "LISTO"
     person.orthophoto_error = None
     _clear_superseded_tile_failures(db, person, job_id)
