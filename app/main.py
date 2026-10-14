@@ -476,7 +476,9 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             "rate": round((int(summary[1] or 0) / total * 100), 1) if total else 0,
         }
         municipalities = db.scalars(select(Municipality).order_by(Municipality.name)).all()
-        jobs = db.scalars(select(Job).order_by(Job.created_at.desc()).limit(8)).all()
+        jobs = db.scalars(
+            select(Job).where(Job.status != "SUPERADO").order_by(Job.created_at.desc()).limit(8)
+        ).all()
         return render(request, "dashboard.html", {"admin": session.admin, "counts": counts, "municipalities": municipalities, "selected_municipality": municipality_id, "jobs": jobs})
 
     @app.get("/admin/configuracion", response_class=HTMLResponse)

@@ -96,6 +96,28 @@ def _overview_min_zoom(person: Person, radius_m: int, settings: Settings) -> int
     return 8
 
 
+def _clear_superseded_tile_failures(db: Session, person: Person, current_job_id: int) -> None:
+    """Close obsolete tile errors after a newer generation succeeds."""
+    if person.status == "ERROR":
+        person.status = "PENDIENTE"
+    failed_jobs = db.scalars(
+        select(Job).where(
+            Job.job_type == "PREPARE_WINDOW",
+            Job.status == "ERROR",
+            Job.id != current_job_id,
+        )
+    ).all()
+    for failed_job in failed_jobs:
+        try:
+            failed_person_id = int(json.loads(failed_job.payload_json).get("person_id"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if failed_person_id == person.id:
+            failed_job.status = "SUPERADO"
+            failed_job.progress = 100
+            failed_job.error = None
+
+
 def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, radius_m: int) -> None:
     job_id = job.id
     person = db.get(Person, person_id)
@@ -189,6 +211,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
     window.error = None
     person.orthophoto_status = "LISTO"
     person.orthophoto_error = None
+    _clear_superseded_tile_failures(db, person, job_id)
     job.progress = 95
     db.commit()
     if previous_dir and previous_dir != relative_dir:

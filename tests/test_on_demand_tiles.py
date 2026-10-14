@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 
 from app.gis import tile_xy
-from app.models import Person, TileWindow
+from app.models import Job, Person, TileWindow
 from app.security import public_csrf
 from app.tile_rendering import tile_bounds_web_mercator, tile_intersects_window
+from app.worker import _clear_superseded_tile_failures
 
 
 def test_on_demand_window_is_ready_without_a_prebuilt_pyramid(test_app, monkeypatch: pytest.MonkeyPatch):
@@ -57,7 +58,6 @@ def test_on_demand_window_is_ready_without_a_prebuilt_pyramid(test_app, monkeypa
 def test_large_window_allows_a_polygon_within_its_radius(test_app):
     app, client, token, person_id = test_app
     with app.state.Session() as db:
-        person = db.get(Person, person_id)
         db.add(TileWindow(person_id=person_id, relative_dir="large", min_zoom=12, max_zoom=19, radius_m=2_000, status="LISTO"))
         db.commit()
     csrf = public_csrf(token, app.state.settings)
@@ -67,6 +67,41 @@ def test_large_window_allows_a_polygon_within_its_radius(test_app):
     }
     response = client.post(f"/p/{token}/submit", json={"csrf": csrf, "geometry": geometry})
     assert response.status_code == 200
+
+
+def test_successful_regeneration_clears_obsolete_tile_error(test_app):
+    app, _, _, person_id = test_app
+    with app.state.Session() as db:
+        person = db.get(Person, person_id)
+        assert person is not None
+        person.status = "ERROR"
+        person.orthophoto_status = "LISTO"
+        superseded = Job(
+            job_type="PREPARE_WINDOW",
+            payload_json='{"person_id":1,"radius_m":10000}',
+            status="ERROR",
+            progress=35,
+            error="Tiempo agotado",
+        )
+        unrelated = Job(
+            job_type="PREPARE_WINDOW",
+            payload_json='{"person_id":999,"radius_m":10000}',
+            status="ERROR",
+            progress=35,
+            error="Tiempo agotado",
+        )
+        db.add_all([superseded, unrelated])
+        db.flush()
+        superseded_id = superseded.id
+        unrelated_id = unrelated.id
+
+        _clear_superseded_tile_failures(db, person, current_job_id=0)
+        db.commit()
+
+        assert person.status == "PENDIENTE"
+        assert db.get(Job, superseded_id).status == "SUPERADO"
+        assert db.get(Job, superseded_id).error is None
+        assert db.get(Job, unrelated_id).status == "ERROR"
 
 
 def test_window_tile_bounds_are_validated_before_rendering():

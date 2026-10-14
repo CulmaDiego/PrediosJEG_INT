@@ -57,7 +57,7 @@ Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una cop
   -DataDir 'D:\PrediosRemotos\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' `
   -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
-  -Version 'v0.3.5'
+  -Version 'v0.3.6'
 ```
 
 Antes de activar Internet, compruebe localmente:
@@ -74,7 +74,7 @@ Después instale `cloudflared`, cree un túnel hacia `http://127.0.0.1:8000` y g
 En el PC de empresa, dentro de `D:\PrediosRemotos\app`:
 
 ```powershell
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.5
+.\ACTUALIZAR_PROD.ps1 -Version v0.3.6
 ```
 
 El script exige un checkout limpio y una etiqueta existente; crea y verifica un respaldo consistente, detiene servicios, instala esa versión, migra la base, reinicia y comprueba `/health` y `/ready`. Si algo falla, detiene procesos y restaura el commit y el respaldo completo.
