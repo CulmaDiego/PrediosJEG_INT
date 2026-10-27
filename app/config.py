@@ -63,7 +63,7 @@ class Settings:
             orthophoto_root=orthophoto_root,
             database_url=database_url,
             secret_key=secret,
-            public_base_url=os.getenv("PREDIOS_PUBLIC_BASE_URL", "http://127.0.0.1:8030").rstrip("/"),
+            public_base_url=os.getenv("PREDIOS_PUBLIC_BASE_URL", "https://interno.prediosjeg.site" if environment == "production" else "http://127.0.0.1:8030").rstrip("/"),
             cookie_secure=_env_bool("PREDIOS_COOKIE_SECURE", environment == "production"),
             qgis_root=Path(os.getenv("PREDIOS_QGIS_ROOT", r"C:\Program Files\QGIS 3.44.3")),
             window_radius_m=min(50_000, max(100, int(os.getenv("PREDIOS_WINDOW_RADIUS_M", "2000")))),

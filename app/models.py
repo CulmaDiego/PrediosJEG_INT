@@ -54,6 +54,7 @@ class OrthophotoSource(Base):
     resolution_x: Mapped[float | None] = mapped_column(Float)
     resolution_y: Mapped[float | None] = mapped_column(Float)
     bounds_json: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="PENDIENTE", nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
     scanned_at: Mapped[datetime | None] = mapped_column(DateTime)

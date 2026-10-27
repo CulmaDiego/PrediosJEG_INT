@@ -2,7 +2,7 @@
 
 Siga [README](../README.md) para rutas, puerto 8030, arranque, respaldo y Cloudflare.
 
-Instale la etiqueta `v1.0.0` de `CulmaDiego/PrediosJEG_INT`. Las ortofotos deben existir y ser legibles para la cuenta que ejecuta el trabajador. Pueden referenciarse desde la carpeta de originales del proyecto público: la aplicación solo las lee.
+Instale la etiqueta `v1.0.1` de `CulmaDiego/PrediosJEG_INT`. Las ortofotos deben existir y ser legibles para la cuenta que ejecuta el trabajador. Pueden referenciarse desde la carpeta de originales del proyecto público: la aplicación solo las lee.
 
 El instalador requiere PowerShell como administrador para registrar las tareas de arranque `PrediosRemotosInt-Web` y `PrediosRemotosInt-Worker`. No ejecute simultáneamente esas tareas y el supervisor del inicio de sesión; use un solo mecanismo de arranque.
 

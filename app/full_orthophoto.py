@@ -17,6 +17,10 @@ from .models import OrthophotoSource, TileWindow, utcnow
 from .tile_rendering import DynamicTileRenderer, native_max_zoom, tile_cache_path
 
 
+class SourceSelectionChanged(RuntimeError):
+    """A source toggle superseded the selection being prepared."""
+
+
 def read_manifest(settings, relative_dir):
     base = tile_cache_path(settings, relative_dir, 0, 0, 0).parents[2]
     return json.loads((base / 'sources.json').read_text(encoding='utf-8'))
@@ -63,6 +67,7 @@ def prepare_full_window(db, settings, job, person):
     sources = db.scalars(select(OrthophotoSource).where(
         OrthophotoSource.municipality_id == person.municipality_id,
         OrthophotoSource.status == 'LISTO',
+        OrthophotoSource.enabled.is_(True),
     )).all()
     valid = []
     centered = []
@@ -79,7 +84,14 @@ def prepare_full_window(db, settings, job, person):
         if metric[0] <= cx <= metric[2] and metric[1] <= cy <= metric[3]:
             centered.append(source)
     if not centered:
-        raise RuntimeError('Ninguna ortofoto asignada cubre el punto de referencia')
+        window = db.get(TileWindow, person.id)
+        if window is None:
+            window = TileWindow(person_id=person.id)
+            db.add(window)
+        window.status = person.orthophoto_status = 'SIN_ORTOFOTO'
+        window.error = person.orthophoto_error = 'Ninguna ortofoto habilitada cubre el punto de referencia'
+        db.commit()
+        return
     def resolution(source):
         return _resolution_metres(source, person.reference_lon, person.reference_lat)
     primary = min(centered, key=lambda source: (resolution(source), source.id))
@@ -132,6 +144,12 @@ def prepare_full_window(db, settings, job, person):
         finally:
             renderer.close()
         (base / 'preload.json').write_text(json.dumps({'version': 1, 'tiles': tiles}), encoding='utf-8')
+        selected_ids = set(db.scalars(select(OrthophotoSource.id).where(
+            OrthophotoSource.municipality_id == person.municipality_id,
+            OrthophotoSource.status == 'LISTO', OrthophotoSource.enabled.is_(True),
+        )))
+        if selected_ids != {source.id for source in sources}:
+            raise SourceSelectionChanged('La selección de ortofotos cambió durante la preparación')
         values = dict(source_id=primary.id, relative_dir=relative_dir, min_zoom=min_zoom, max_zoom=max_zoom,
                       radius_m=settings.window_radius_m, render_mode='FULL', status='LISTO', error=None, updated_at=utcnow())
         db.execute(insert(TileWindow).values(person_id=person.id, **values).on_conflict_do_update(index_elements=[TileWindow.person_id], set_=values))

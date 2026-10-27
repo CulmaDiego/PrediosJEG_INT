@@ -150,6 +150,7 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
         ).where(
             OrthophotoSource.municipality_id == person.municipality_id,
             OrthophotoSource.status == "LISTO",
+            OrthophotoSource.enabled.is_(True),
         )
     ).all()
     requested_bounds = metres_bounds(person.reference_lon, person.reference_lat, radius_m)
@@ -257,6 +258,7 @@ def execute_job(db: Session, settings: Settings, job: Job) -> None:
 
 
 def run(once: bool = False) -> int:
+    from .full_orthophoto import SourceSelectionChanged
     settings = Settings.from_env()
     settings.ensure_directories()
     factory = build_session_factory(build_engine(settings.database_url))
@@ -275,6 +277,13 @@ def run(once: bool = False) -> int:
                     job.progress = 100
                     job.error = None
                     db.commit()
+                except SourceSelectionChanged:
+                    db.rollback()
+                    failed = db.get(Job, job_id)
+                    if failed:
+                        failed.status, failed.progress, failed.error = "PENDIENTE", 0, None
+                        failed.locked_by = failed.locked_at = None
+                        db.commit()
                 except Exception as exc:
                     db.rollback()
                     failed = db.get(Job, job_id)
@@ -287,7 +296,8 @@ def run(once: bool = False) -> int:
                         person = db.get(Person, person_id)
                         window = db.get(TileWindow, person_id)
                         if person:
-                            person.status = "ERROR"
+                            if not person.drawing_version:
+                                person.status = "ERROR"
                             person.orthophoto_status = "ERROR"
                             person.orthophoto_error = failed.error
                         if window:

@@ -5,7 +5,7 @@ param(
     [string]$OrthoDir = 'D:\PrediosRemotosInt\ortofotos',
     [string]$QgisRoot = 'C:\Program Files\QGIS 3.44.13',
     [string]$PythonExe = '',
-    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v1.0.0'
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v1.0.1'
 )
 $ErrorActionPreference = 'Stop'
 

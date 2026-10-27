@@ -1,10 +1,10 @@
 # Predios Remotos Interno
 
-Aplicación de oficina independiente de Predios Remotos. Repositorio: https://github.com/CulmaDiego/PrediosJEG_INT.git. Versión inicial interna: **1.0.0**.
+Aplicación de oficina independiente de Predios Remotos. Repositorio: https://github.com/CulmaDiego/PrediosJEG_INT.git. Versión interna: **1.0.1**.
 
 ## Acceso en este equipo
 
-- Administración: http://127.0.0.1:8030/admin
+- Administración: https://interno.prediosjeg.site/admin
 - Salud: http://127.0.0.1:8030/health y http://127.0.0.1:8030/ready
 - Código: `D:\PrediosRemotosInt\app`.
 - Base, configuración, caché y registros: `D:\PrediosRemotosInt\datos`.
@@ -14,13 +14,21 @@ La instalación interna conserva una copia consistente de las personas, dibujos,
 
 ## Cobertura completa
 
-Cada registro mantiene su punto de referencia. El mapa inicia centrado allí y permite navegar por **todas las ortofotos listas asignadas al municipio**, sin radio de recorte ni límite de distancia para el dibujo. Los botones **Punto inicial** y **Ver ortofoto completa** permiten alternar entre ambas vistas. Se conserva la validación de polígonos, coordenadas, vértices y autointersecciones.
+Cada registro mantiene su punto de referencia. El mapa inicia centrado allí y permite navegar por **las ortofotos habilitadas y listas asignadas al municipio**, sin radio de recorte ni límite de distancia para el dibujo. Los botones **Punto inicial** y **Ver ortofoto completa** permiten alternar entre ambas vistas. Se conserva la validación de polígonos, coordenadas, vértices y autointersecciones.
 
 El trabajador prepara referencias VRT a los originales, una vista general de toda la cobertura y detalle cercano al punto de referencia. Al navegar, el servidor genera únicamente las teselas necesarias a la resolución original. Los PNG quedan en una caché compartida entre personas que usan los mismos archivos, además de la caché del navegador. Regenerar un registro conserva esa caché. Cambiar el tamaño o fecha de modificación de un original produce una nueva clave de caché al regenerar.
 
 La primera visita a una zona o nivel de detalle todavía no preparado puede requerir lectura de disco. No se descarga anticipadamente la ortofoto completa a resolución máxima ni se promete funcionamiento sin conexión. Esta estrategia permite recorrer imágenes grandes sin saturar la memoria del navegador.
 
 La caché compartida está en `datos/tiles/_full_cache`. No se elimina al borrar una persona. Los respaldos completos incluyen la caché; las versiones antiguas de archivos pueden limpiarse de forma programada con la aplicación detenida, manteniendo las claves referidas por los manifiestos actuales.
+
+## Activar o desactivar ortofotos
+
+En **Administración → Ortofotos**, cada imagen tiene un estado de uso y un botón **Activar/Desactivar**. Desactivarla no elimina ni modifica el archivo original. La selección se conserva al reescanear el catálogo.
+
+Cada cambio prepara de nuevo los mapas del municipio, incluidos los registros con respuesta, conservando sus dibujos, versiones y enlaces. Durante la preparación, el enlace indica que la imagen se está actualizando. Cuando termina, recargue los mapas que ya tenía abiertos. Si ninguna imagen habilitada cubre el punto, se muestra “No hay ortofoto habilitada” con acceso a administración.
+
+Las cuatro ortofotos de las carpetas `Urbano` de esta instalación están desactivadas; pueden reactivarse desde el mismo panel. Esta selección pertenece a la base interna y no afecta al proyecto público.
 
 ## Inicio y operación
 
@@ -37,17 +45,17 @@ Los scripts de instalación y actualización usan exclusivamente `PrediosRemotos
 .\INSTALAR_PROD.ps1 -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG_INT.git' `
   -InstallDir 'D:\PrediosRemotosInt\app' -DataDir 'D:\PrediosRemotosInt\datos' `
   -OrthoDir 'D:\PrediosRemotos\ortofotos' -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
-  -Version 'v1.0.0'
+  -Version 'v1.0.1'
 ```
 
 ## Cloudflare
 
-Configure la nueva ruta del túnel con Service URL **`http://127.0.0.1:8030`**. No cambie el destino del sitio público, que permanece en 8000. Esta entrega deja el origen interno listo; el dominio y la ruta en Cloudflare aún deben configurarse.
+Configure la nueva ruta del túnel con Service URL **`http://127.0.0.1:8030`**. No cambie el destino del sitio público, que permanece en 8000. El dominio `interno.prediosjeg.site` ya está conectado al origen interno.
 
-Cuando tenga el hostname HTTPS definitivo, ajuste fuera de Git `D:\PrediosRemotosInt\datos\config\production.env`:
+La configuración de esta instalación ya usa el hostname HTTPS y cookies seguras. En otras instalaciones, ajuste fuera de Git `D:\PrediosRemotosInt\datos\config\production.env`:
 
 ```dotenv
-PREDIOS_PUBLIC_BASE_URL=https://su-hostname-interno
+PREDIOS_PUBLIC_BASE_URL=https://interno.prediosjeg.site
 PREDIOS_COOKIE_SECURE=true
 PREDIOS_FULL_ORTHOPHOTO=true
 ```

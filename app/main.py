@@ -121,6 +121,32 @@ def _queue_tile_jobs(db: Session, people: list[Person], radius_m: int) -> dict[s
     return {"requested": requested, "without_coordinates": without_coordinates, "preserved_drawings": preserved_drawings}
 
 
+def _queue_municipality_imagery(db: Session, municipality_id: int | None, settings: Settings) -> int:
+    """Rebuild imagery after a source change, retaining every submitted drawing."""
+    if municipality_id is None:
+        return 0
+    people = db.scalars(select(Person).where(
+        Person.municipality_id == municipality_id, Person.active.is_(True),
+        Person.reference_lon.is_not(None), Person.reference_lat.is_not(None),
+    )).all()
+    pending_ids = set()
+    for pending in db.scalars(select(Job).where(Job.job_type == "PREPARE_WINDOW", Job.status == "PENDIENTE")):
+        try:
+            pending_ids.add(int(json.loads(pending.payload_json)["person_id"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+    for person in people:
+        # A running job may have captured the previous selection. Always leave
+        # one pending job to apply the latest choice when that render ends.
+        if person.id not in pending_ids:
+            db.add(Job(job_type="PREPARE_WINDOW", payload_json=json.dumps({"person_id": person.id, "radius_m": _tile_radius(db, settings)}, sort_keys=True, separators=(",", ":")), status="PENDIENTE"))
+        person.orthophoto_status, person.orthophoto_error = "PENDIENTE", None
+        window = db.get(TileWindow, person.id)
+        if window:
+            window.status, window.error = "PENDIENTE", None
+    return len(people)
+
+
 def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  # type: ignore[no-untyped-def]
     ready: list[Person] = []
     for person in db.scalars(query).all():
@@ -926,6 +952,21 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         _audit(db, request, "ORTOFOTO_ASIGNADA", session.admin.username, details={"source_id": source_id, "municipality_id": municipality_id})
         db.commit()
         return RedirectResponse("/admin/ortofotos", status_code=303)
+
+    @app.post("/admin/ortofotos/{source_id}/estado")
+    def orthophoto_activation(source_id: int, request: Request, enabled: bool = Form(...), csrf_token: str = Form(...), db: Session = Depends(get_db)) -> Response:
+        session = require_admin(request, db)
+        verify_csrf(request, csrf_token, session)
+        source = db.get(OrthophotoSource, source_id)
+        if not source:
+            raise HTTPException(404)
+        if source.enabled != enabled:
+            source.enabled = enabled
+            requested = _queue_municipality_imagery(db, source.municipality_id, settings)
+            _audit(db, request, "ORTOFOTO_HABILITADA" if enabled else "ORTOFOTO_DESHABILITADA", session.admin.username,
+                   details={"source_id": source.id, "mapas_solicitados": requested})
+            db.commit()
+        return RedirectResponse("/admin/ortofotos?actualizada=1", status_code=303)
 
     def current_features(db: Session, municipality_id: int | None) -> list[dict]:
         query = select(DrawingVersion, Person, Municipality).join(Person, DrawingVersion.person_id == Person.id).join(Municipality, Person.municipality_id == Municipality.id).where(DrawingVersion.is_current.is_(True), Person.active.is_(True))
