@@ -16,6 +16,7 @@
     [lat - latDelta, lon - lonDelta],
     [lat + latDelta, lon + lonDelta],
   );
+  const fullImagery = mapNode.dataset.full === 'true';
   const allowedRadius = radius;
   const allowedBounds = imageBounds;
   const draftKey = `predios-remotos-draft-${token.slice(0, 12)}`;
@@ -32,7 +33,11 @@
   const overviewMinZoom = Math.floor(map.getBoundsZoom(allowedBounds, false));
   map.setMinZoom(Math.max(nativeMinZoom, overviewMinZoom));
   map.setMaxZoom(displayMaxZoom);
-  map.fitBounds(allowedBounds, { padding: [20, 20], maxZoom: Math.min(16, nativeMaxZoom) });
+  const goToCenter = () => map.setView([lat, lon], Math.max(map.getMinZoom(), Math.min(16, nativeMaxZoom)));
+  if (fullImagery) goToCenter();
+  else map.fitBounds(allowedBounds, { padding: [20, 20], maxZoom: Math.min(16, nativeMaxZoom) });
+  document.getElementById('centerMap')?.addEventListener('click', goToCenter);
+  document.getElementById('showAllImagery')?.addEventListener('click', () => map.fitBounds(imageBounds, { padding: [20, 20] }));
   mapNode.dataset.minDisplayZoom = String(map.getMinZoom());
   const urlFor = ([z, x, y]) => `/p/${encodeURIComponent(token)}/tiles/${z}/${x}/${y}.png?v=${encodeURIComponent(imageVersion)}`;
   const imageCache = new PrediosImagery.ImageCache(urlFor, nativeMinZoom);
@@ -75,7 +80,7 @@
     retry.addEventListener('click', () => imageLayer.redraw());
   }
   L.circleMarker([lat, lon], { radius: 8, weight: 3, color: '#162f3e', fillColor: '#44bec6', fillOpacity: 1 }).addTo(map).bindTooltip('Punto de referencia');
-  L.circle([lat, lon], { radius: allowedRadius, color: '#096e74', weight: 1, fill: false, dashArray: '6 6', interactive: false }).addTo(map);
+  if (!fullImagery) L.circle([lat, lon], { radius: allowedRadius, color: '#096e74', weight: 1, fill: false, dashArray: '6 6', interactive: false }).addTo(map);
   const syncMapState = () => {
     const center = map.getCenter();
     mapNode.dataset.zoom = String(map.getZoom());

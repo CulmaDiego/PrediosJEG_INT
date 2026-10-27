@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Personas · Predios Remotos{% endblock %}
+{% block title %}Personas · Predios Remotos Interno{% endblock %}
 {% block content %}
 <div class="page-head"><div><p class="eyebrow">Seguimiento</p><h1>Personas</h1></div><div class="button-row"><a class="button secondary" href="/admin/enlaces{% if filters.municipality_id %}?municipality_id={{ filters.municipality_id }}{% endif %}">Descargar enlaces listos</a><a class="button secondary" href="/admin/personas/informe.xlsx{% if filters.municipality_id %}?municipality_id={{ filters.municipality_id }}{% endif %}">Informe de seguimiento</a><a class="button ghost" href="/admin/importar">Importar archivo</a><a class="button primary" href="/admin/personas/nueva">Crear una persona</a></div></div>
 {% if request.query_params.get('eliminadas') == '0' %}<div class="alert danger" role="alert">Seleccione al menos una persona para eliminar.</div>{% elif request.query_params.get('eliminadas') %}<div class="alert success" role="status">Se eliminaron completamente {{ request.query_params.get('eliminadas') }} persona(s), junto con sus enlaces, dibujos y archivos derivados.</div>{% endif %}
@@ -12,7 +12,7 @@
 </form>
 <section class="panel table-panel">
   <form method="post" action="/admin/personas/eliminar" data-selection-form>
-  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_int_csrf', '') }}">
   {% if people %}<div class="bulk-actions"><label><input type="checkbox" data-select-all> Seleccionar esta página</label><span><strong data-selected-count>0</strong> seleccionada(s)</span><span class="bulk-buttons"><button class="button secondary small" type="submit" formaction="/admin/personas/preparar-teselas" data-prepare-selected disabled>Generar y verificar teselas</button><button class="button danger small" type="submit" data-confirm-selected disabled>Eliminar seleccionadas</button></span></div>{% endif %}
   <div class="responsive-table">
     <table><thead><tr><th aria-label="Seleccionar"></th><th>Persona</th><th>Municipio</th><th>Respuesta</th><th>Imagen</th><th>Último acceso</th><th>Envío</th><th>Versión</th><th></th></tr></thead>

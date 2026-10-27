@@ -25,6 +25,7 @@ from .config import REPO_ROOT, Settings
 from .db import Base, build_engine, build_session_factory
 from .gis import qgis_environment, qgis_tool, validate_polygon, verify_generated_tiles
 from .importer import normalize_phone, parse_coordinates, validate_import
+from .full_orthophoto import full_tile_path, read_manifest, tile_in_coverage
 from .tile_rendering import DynamicTileRenderer, TileQueueFull, is_cached_tile, tile_cache_path, tile_intersects_window, window_bounds_wgs84
 from .models import (
     Admin,
@@ -135,9 +136,9 @@ def _verified_people(db: Session, query, settings: Settings) -> list[Person]:  #
             or window.max_zoom is None
         ):
             continue
-        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL", "FULL"}:
             base = settings.data_dir / "tiles" / window.relative_dir
-            mask_ready = window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson"))
+            mask_ready = ((base / "sources.json").is_file() if window.render_mode == "FULL" else window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson")))
             if (base / "source.vrt").is_file() and mask_ready:
                 ready.append(person)
             continue
@@ -991,9 +992,9 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         window = db.get(TileWindow, person.id)
         if not window or window.status != "LISTO" or not window.relative_dir:
             return render(request, "public_preparing.html", {"person": person}, 409)
-        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL", "FULL"}:
             base = settings.data_dir / "tiles" / window.relative_dir
-            mask_ready = window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson"))
+            mask_ready = ((base / "sources.json").is_file() if window.render_mode == "FULL" else window.render_mode != "ORIGINAL" or all((base / name).is_file() for name in ("sources.json", "cutline.geojson")))
             if not (base / "source.vrt").is_file() or not mask_ready:
                 return render(request, "public_preparing.html", {"person": person}, 409)
         else:
@@ -1013,7 +1014,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         _audit(db, request, "ENLACE_ABIERTO", "PUBLICO", person.id)
         db.commit()
         current = db.scalar(select(DrawingVersion).where(DrawingVersion.person_id == person.id, DrawingVersion.is_current.is_(True)))
-        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "map_radius_m": window.radius_m, "map_bounds": window_bounds_wgs84(person.reference_lon, person.reference_lat, window.radius_m), "current_geometry": current.geometry_json if current else "null"})
+        return render(request, "public_map.html", {"person": person, "token": token, "public_csrf": public_csrf(token, settings), "window": window, "map_radius_m": window.radius_m, "map_bounds": read_manifest(settings, window.relative_dir)["bounds"] if window.render_mode == "FULL" else window_bounds_wgs84(person.reference_lon, person.reference_lat, window.radius_m), "current_geometry": current.geometry_json if current else "null"})
 
     @app.get("/p/{token}/preload")
     def public_preload(token: str, request: Request, db: Session = Depends(get_db)) -> Response:
@@ -1042,7 +1043,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             raise HTTPException(409, "No hay coordenada de referencia")
         try:
             window = db.get(TileWindow, person.id)
-            maximum_distance_m = window.radius_m if window and window.status == "LISTO" else 300
+            maximum_distance_m = None if settings.full_orthophoto else (window.radius_m if window and window.status == "LISTO" else 300)
             geometry, area = validate_polygon(body.get("geometry") or {}, person.reference_lon, person.reference_lat, maximum_distance_m)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
@@ -1073,14 +1074,15 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             raise HTTPException(404)
         if window.min_zoom is None or window.max_zoom is None or not window.min_zoom <= z <= window.max_zoom:
             raise HTTPException(404)
-        if window.render_mode in {"ON_DEMAND", "ORIGINAL"}:
+        if window.render_mode in {"ON_DEMAND", "ORIGINAL", "FULL"}:
             person = link.person
             if person.reference_lon is None or person.reference_lat is None:
                 raise HTTPException(404)
             try:
-                if not tile_intersects_window(person.reference_lon, person.reference_lat, window.radius_m, z, x, y):
+                inside = tile_in_coverage(settings, window.relative_dir, z, x, y) if window.render_mode == "FULL" else tile_intersects_window(person.reference_lon, person.reference_lat, window.radius_m, z, x, y)
+                if not inside:
                     raise HTTPException(404)
-                tile = tile_cache_path(settings, window.relative_dir, z, x, y)
+                tile = full_tile_path(settings, window.relative_dir, z, x, y) if window.render_mode == "FULL" else tile_cache_path(settings, window.relative_dir, z, x, y)
             except ValueError:
                 raise HTTPException(404)
             base = (settings.data_dir / "tiles" / window.relative_dir).resolve()

@@ -57,4 +57,4 @@ def test_app(tmp_path: Path):
 def login(client: TestClient) -> str:
     response = client.post("/admin/login", data={"username": "admin", "password": "Correcta-12345"}, follow_redirects=False)
     assert response.status_code == 303
-    return client.cookies.get("predios_csrf")
+    return client.cookies.get("predios_int_csrf")

@@ -20,8 +20,8 @@ from .config import Settings
 from .models import Admin, AdminSession, Person, PublicLink, utcnow
 
 
-SESSION_COOKIE = "predios_session"
-CSRF_COOKIE = "predios_csrf"
+SESSION_COOKIE = "predios_int_session"
+CSRF_COOKIE = "predios_int_csrf"
 _password_hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 
 

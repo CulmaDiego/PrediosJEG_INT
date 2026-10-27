@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dibuje su predio · Predios Remotos{% endblock %}
+{% block title %}Dibuje su predio · Predios Remotos Interno{% endblock %}
 {% block body_class %}public-map-page{% endblock %}
 {% block head %}
 {% if settings.asset_mode == 'local' %}
@@ -11,8 +11,9 @@
 {% block body %}
 <main class="public-map-shell">
   <header class="public-header"><div class="public-branding"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt="Jorge Eliecer Gaitán"></span><div class="public-person"><span class="public-step">Ubique el contorno</span><h1>{{ person.name }}</h1></div></div><button id="helpButton" class="icon-button" type="button" aria-label="Ver instrucciones">?</button></header>
-  <div id="map" data-token="{{ token }}" data-lat="{{ person.reference_lat }}" data-lon="{{ person.reference_lon }}" data-csrf="{{ public_csrf }}" data-window="{{ window.status if window else 'PENDIENTE' }}" data-radius="{{ map_radius_m }}" data-bounds='{% if map_bounds is defined %}{{ map_bounds|tojson }}{% endif %}' data-min-zoom="{{ window.min_zoom if window and window.min_zoom is not none else settings.tile_min_zoom }}" data-max-native-zoom="{{ window.max_zoom if window and window.max_zoom is not none else settings.tile_max_zoom }}" data-image-version="{{ window.relative_dir if window else '' }}" data-current='{{ current_geometry|safe }}' aria-label="Mapa para dibujar el predio"><div id="imageLoader" class="map-loading"><div><span class="loading-spinner" aria-hidden="true"></span><strong>Preparando su mapa</strong><p id="imageLoadMessage" role="status">Cargando imagen y niveles de zoom…</p><button id="retryInitial" class="button primary" type="button" hidden>Reintentar</button></div></div></div>
-  <div id="mapStatus" class="map-status" role="status"><span id="mapStatusText">{% if window and window.status == 'LISTO' and window.render_mode in ['ON_DEMAND', 'ORIGINAL'] %}Ortofoto lista · Radio autorizado: {{ map_radius_m }} m{% elif window and window.status == 'LISTO' %}Ortofoto lista{% elif person.orthophoto_status == 'SIN_ORTOFOTO' %}Sin ortofoto: {{ person.orthophoto_error }}{% else %}La ortofoto se está preparando{% endif %}</span> <button id="retryMap" type="button" hidden>Reintentar</button></div>
+  <div id="map" data-full="{{ 'true' if window and window.render_mode == 'FULL' else 'false' }}" data-token="{{ token }}" data-lat="{{ person.reference_lat }}" data-lon="{{ person.reference_lon }}" data-csrf="{{ public_csrf }}" data-window="{{ window.status if window else 'PENDIENTE' }}" data-radius="{{ map_radius_m }}" data-bounds='{% if map_bounds is defined %}{{ map_bounds|tojson }}{% endif %}' data-min-zoom="{{ window.min_zoom if window and window.min_zoom is not none else settings.tile_min_zoom }}" data-max-native-zoom="{{ window.max_zoom if window and window.max_zoom is not none else settings.tile_max_zoom }}" data-image-version="{{ window.relative_dir if window else '' }}" data-current='{{ current_geometry|safe }}' aria-label="Mapa para dibujar el predio"><div id="imageLoader" class="map-loading"><div><span class="loading-spinner" aria-hidden="true"></span><strong>Preparando su mapa</strong><p id="imageLoadMessage" role="status">Cargando imagen y niveles de zoom…</p><button id="retryInitial" class="button primary" type="button" hidden>Reintentar</button></div></div></div>
+  <div id="mapStatus" class="map-status" role="status"><span id="mapStatusText">{% if window and window.render_mode == 'FULL' %}Uso interno · Ortofoto completa{% elif window and window.status == 'LISTO' and window.render_mode in ['ON_DEMAND', 'ORIGINAL'] %}Ortofoto lista · Radio autorizado: {{ map_radius_m }} m{% elif window and window.status == 'LISTO' %}Ortofoto lista{% elif person.orthophoto_status == 'SIN_ORTOFOTO' %}Sin ortofoto: {{ person.orthophoto_error }}{% else %}La ortofoto se está preparando{% endif %}</span> <button id="retryMap" type="button" hidden>Reintentar</button></div>
+  {% if window and window.render_mode == 'FULL' %}<div class="imagery-navigation"><button id="centerMap" class="button secondary" type="button">Punto inicial</button><button id="showAllImagery" class="button secondary" type="button">Ver ortofoto completa</button></div>{% endif %}
   <div class="tool-dock" aria-label="Herramientas de dibujo">
     <button data-tool="move" class="tool active" type="button"><span aria-hidden="true">✥</span>Mover</button>
     <button data-tool="polygon" class="tool" type="button"><span aria-hidden="true">⬠</span>Por puntos</button>
@@ -27,5 +28,5 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 {% if settings.asset_mode == 'local' %}<script src="/static/vendor/leaflet/leaflet.js"></script><script src="/static/vendor/geoman/leaflet-geoman.min.js"></script>{% else %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.3/dist/leaflet-geoman.min.js"></script>{% endif %}
 <script src="/static/map-imagery.js?v=1"></script>
-<script src="/static/public-map.js?v=14"></script>
+<script src="/static/public-map.js?v=15"></script>
 {% endblock %}

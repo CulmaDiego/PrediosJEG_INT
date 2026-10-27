@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Importar · Predios Remotos{% endblock %}
+{% block title %}Importar · Predios Remotos Interno{% endblock %}
 {% block content %}
 <div class="page-head"><div><p class="eyebrow">Validación previa</p><h1>Importar personas</h1><p class="muted">El archivo completo se valida antes de modificar datos.</p></div><a class="button secondary" href="/admin/personas/nueva">Crear una sola persona</a></div>
 <div class="split-grid">
   <section class="panel"><div class="panel-head"><h2>Nuevo archivo</h2></div>
     <form method="post" enctype="multipart/form-data" class="stack-form">
-      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_int_csrf', '') }}">
       <label>Municipio<select name="municipality_id" required><option value="">Seleccione…</option>{% for municipality in municipalities %}<option value="{{ municipality.id }}">{{ municipality.name }}</option>{% endfor %}</select></label>
       <label>Excel o CSV<input type="file" name="file" accept=".xlsx,.csv" required></label>
       <p class="hint">Columnas: NOMBRE, CELULAR, COORDENADAS, OBSERVACION. Coordenadas: latitud,longitud.</p>

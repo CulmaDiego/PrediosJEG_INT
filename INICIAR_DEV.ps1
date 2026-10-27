@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 Set-Location -LiteralPath $repo
 $env:PREDIOS_ENV = 'development'
-if (-not $env:PREDIOS_DATA_DIR) { $env:PREDIOS_DATA_DIR = [IO.Path]::GetFullPath((Join-Path $repo '..\PrediosRemotos_data_dev')) }
+if (-not $env:PREDIOS_DATA_DIR) { $env:PREDIOS_DATA_DIR = [IO.Path]::GetFullPath((Join-Path $repo '..\PrediosRemotosInt_data_dev')) }
 if (-not $env:PREDIOS_ORTHOPHOTO_ROOT) { $env:PREDIOS_ORTHOPHOTO_ROOT = Join-Path $repo 'Imagenes' }
 $configDir = Join-Path $env:PREDIOS_DATA_DIR 'config'
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
@@ -39,5 +39,5 @@ $runDir = Join-Path $env:PREDIOS_DATA_DIR 'run'
 New-Item -ItemType Directory -Force -Path $logDir,$runDir | Out-Null
 $worker = Start-Process -FilePath $venvPython -ArgumentList '-m','app.worker' -WorkingDirectory $repo -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logDir 'worker.out.log') -RedirectStandardError (Join-Path $logDir 'worker.err.log')
 [IO.File]::WriteAllText((Join-Path $runDir 'worker.pid'), [string]$worker.Id)
-Write-Host 'Predios Remotos: http://127.0.0.1:8000' -ForegroundColor Green
-try { & $venvPython -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload } finally { if (-not $worker.HasExited) { Stop-Process -Id $worker.Id -Force } }
+Write-Host 'Predios Remotos: http://127.0.0.1:8030' -ForegroundColor Green
+try { & $venvPython -m uvicorn app.main:app --host 127.0.0.1 --port 8030 --reload } finally { if (-not $worker.HasExited) { Stop-Process -Id $worker.Id -Force } }

@@ -139,6 +139,9 @@ def prepare_window(db: Session, settings: Settings, job: Job, person_id: int, ra
     person = db.get(Person, person_id)
     if not person or person.reference_lon is None or person.reference_lat is None:
         raise RuntimeError("La persona no existe o no tiene coordenadas")
+    if settings.full_orthophoto:
+        from .full_orthophoto import prepare_full_window
+        return prepare_full_window(db, settings, job, person)
     window = db.get(TileWindow, person_id)
     previous_dir = window.relative_dir if window else None
     sources = db.scalars(

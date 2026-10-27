@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)][ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version,
-    [string]$EnvFile = 'D:\PrediosRemotos\datos\config\production.env'
+    [string]$EnvFile = 'D:\PrediosRemotosInt\datos\config\production.env'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -20,7 +20,7 @@ Assert-NativeSuccess 'Comprobar el checkout'
 if ($changes) { throw 'El checkout de producción tiene cambios locales. Deténgase y revíselos.' }
 $origin = (git remote get-url origin).Trim()
 Assert-NativeSuccess 'Leer el origen Git'
-if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG(\.git)?$') { throw "El origen Git no es el repositorio esperado: $origin" }
+if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG_INT(\.git)?$') { throw "El origen Git no es el repositorio esperado: $origin" }
 git fetch --tags --prune origin
 Assert-NativeSuccess 'Descargar etiquetas'
 git rev-parse --verify "refs/tags/$Version" 2>$null | Out-Null
@@ -32,8 +32,8 @@ $backup = Join-Path $env:PREDIOS_DATA_DIR "backups\antes-$Version-$stamp"
 $backupVerified = $false
 
 try {
-    schtasks /End /TN 'PrediosRemotos-Web' 2>$null | Out-Null
-    schtasks /End /TN 'PrediosRemotos-Worker' 2>$null | Out-Null
+    schtasks /End /TN 'PrediosRemotosInt-Web' 2>$null | Out-Null
+    schtasks /End /TN 'PrediosRemotosInt-Worker' 2>$null | Out-Null
     Start-Sleep -Seconds 2
     & $python -m app.cli backup --destination $backup
     Assert-NativeSuccess 'Crear el respaldo'
@@ -46,16 +46,16 @@ try {
     Assert-NativeSuccess 'Instalar dependencias'
     & $python -m alembic -c (Join-Path $repo 'alembic.ini') upgrade head
     Assert-NativeSuccess 'Migrar la base de datos'
-    schtasks /Run /TN 'PrediosRemotos-Worker'
+    schtasks /Run /TN 'PrediosRemotosInt-Worker'
     Assert-NativeSuccess 'Iniciar el trabajador'
-    schtasks /Run /TN 'PrediosRemotos-Web'
+    schtasks /Run /TN 'PrediosRemotosInt-Web'
     Assert-NativeSuccess 'Iniciar la web'
     $verified = $false
     for ($attempt = 0; $attempt -lt 15; $attempt++) {
         Start-Sleep -Seconds 2
         try {
-            $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 3
-            $ready = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/ready' -TimeoutSec 3
+            $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8030/health' -TimeoutSec 3
+            $ready = Invoke-RestMethod -Uri 'http://127.0.0.1:8030/ready' -TimeoutSec 3
             if ($health.status -eq 'ok' -and $health.version -eq $Version.TrimStart('v') -and $ready.status -eq 'ready') {
                 $verified = $true
                 break
@@ -63,7 +63,7 @@ try {
         } catch { Start-Sleep -Milliseconds 200 }
     }
     if (-not $verified) { throw 'Las comprobaciones de salud no pasaron para la versión nueva.' }
-    $tasks = @(Get-ScheduledTask -TaskName 'PrediosRemotos-Web','PrediosRemotos-Worker')
+    $tasks = @(Get-ScheduledTask -TaskName 'PrediosRemotosInt-Web','PrediosRemotosInt-Worker')
     if ($tasks.Count -ne 2 -or @($tasks | Where-Object { $_.State -ne 'Running' }).Count -gt 0) {
         throw 'Una tarea de producción no sigue en ejecución después de actualizar.'
     }
@@ -71,8 +71,8 @@ try {
 } catch {
     $failure = $_.Exception.Message
     $rollbackErrors = @()
-    schtasks /End /TN 'PrediosRemotos-Web' 2>$null | Out-Null
-    schtasks /End /TN 'PrediosRemotos-Worker' 2>$null | Out-Null
+    schtasks /End /TN 'PrediosRemotosInt-Web' 2>$null | Out-Null
+    schtasks /End /TN 'PrediosRemotosInt-Worker' 2>$null | Out-Null
     Start-Sleep -Seconds 2
     try {
         git checkout --detach $oldCommit
@@ -87,9 +87,9 @@ try {
         } catch { $rollbackErrors += "datos: $($_.Exception.Message)" }
     }
     try {
-        schtasks /Run /TN 'PrediosRemotos-Worker'
+        schtasks /Run /TN 'PrediosRemotosInt-Worker'
         Assert-NativeSuccess 'Reiniciar el trabajador anterior'
-        schtasks /Run /TN 'PrediosRemotos-Web'
+        schtasks /Run /TN 'PrediosRemotosInt-Web'
         Assert-NativeSuccess 'Reiniciar la web anterior'
     } catch { $rollbackErrors += "servicios: $($_.Exception.Message)" }
     if ($rollbackErrors.Count -gt 0) {

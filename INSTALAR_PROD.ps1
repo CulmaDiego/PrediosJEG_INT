@@ -1,11 +1,11 @@
 param(
-    [string]$RepoUrl = 'https://github.com/CulmaDiego/PrediosJEG.git',
-    [string]$InstallDir = 'D:\PrediosRemotos\app',
-    [string]$DataDir = 'D:\PrediosRemotos\datos',
-    [string]$OrthoDir = 'D:\PrediosRemotos\ortofotos',
+    [string]$RepoUrl = 'https://github.com/CulmaDiego/PrediosJEG_INT.git',
+    [string]$InstallDir = 'D:\PrediosRemotosInt\app',
+    [string]$DataDir = 'D:\PrediosRemotosInt\datos',
+    [string]$OrthoDir = 'D:\PrediosRemotosInt\ortofotos',
     [string]$QgisRoot = 'C:\Program Files\QGIS 3.44.13',
     [string]$PythonExe = '',
-    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v0.3.4'
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$')][string]$Version = 'v1.0.0'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -85,7 +85,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $resolvedInstall '.git'))) { throw "
 Set-Location -LiteralPath $resolvedInstall
 $origin = (git remote get-url origin).Trim()
 Assert-NativeSuccess 'Leer el origen Git'
-if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG(\.git)?$') { throw "El origen Git no es el esperado: $origin" }
+if ($origin -notmatch 'github\.com[:/]CulmaDiego/PrediosJEG_INT(\.git)?$') { throw "El origen Git no es el esperado: $origin" }
 $changes = git status --porcelain
 Assert-NativeSuccess 'Comprobar el checkout'
 if ($changes) { throw 'El checkout de instalación contiene cambios locales. Deténgase y revíselos.' }
@@ -170,20 +170,20 @@ if ($LASTEXITCODE -eq 1) {
 
 $webScript = Join-Path $resolvedInstall 'scripts\RUN_WEB.ps1'
 $workerScript = Join-Path $resolvedInstall 'scripts\RUN_WORKER.ps1'
-schtasks /Create /TN 'PrediosRemotos-Web' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$webScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
+schtasks /Create /TN 'PrediosRemotosInt-Web' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$webScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
 Assert-NativeSuccess 'Registrar la tarea web'
-schtasks /Create /TN 'PrediosRemotos-Worker' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
+schtasks /Create /TN 'PrediosRemotosInt-Worker' /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$workerScript`" -RepoDir `"$resolvedInstall`" -EnvFile `"$envFile`"" /F
 Assert-NativeSuccess 'Registrar la tarea del trabajador'
-schtasks /Run /TN 'PrediosRemotos-Web'
+schtasks /Run /TN 'PrediosRemotosInt-Web'
 Assert-NativeSuccess 'Iniciar la tarea web'
-schtasks /Run /TN 'PrediosRemotos-Worker'
+schtasks /Run /TN 'PrediosRemotosInt-Worker'
 Assert-NativeSuccess 'Iniciar la tarea del trabajador'
 $verified = $false
 for ($attempt = 0; $attempt -lt 15; $attempt++) {
     Start-Sleep -Seconds 2
     try {
-        $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 3
-        $ready = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/ready' -TimeoutSec 3
+        $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8030/health' -TimeoutSec 3
+        $ready = Invoke-RestMethod -Uri 'http://127.0.0.1:8030/ready' -TimeoutSec 3
         if ($health.status -eq 'ok' -and $health.version -eq $Version.TrimStart('v') -and $ready.status -eq 'ready') {
             $verified = $true
             break
@@ -191,9 +191,9 @@ for ($attempt = 0; $attempt -lt 15; $attempt++) {
     } catch { Start-Sleep -Milliseconds 200 }
 }
 if (-not $verified) { throw 'Las tareas se registraron, pero /health o /ready no respondió correctamente. Revise el Visor de eventos antes de publicar el túnel.' }
-$tasks = @(Get-ScheduledTask -TaskName 'PrediosRemotos-Web','PrediosRemotos-Worker')
+$tasks = @(Get-ScheduledTask -TaskName 'PrediosRemotosInt-Web','PrediosRemotosInt-Worker')
 if ($tasks.Count -ne 2 -or @($tasks | Where-Object { $_.State -ne 'Running' }).Count -gt 0) {
-    throw 'La web responde, pero una tarea no sigue en ejecución. Revise PrediosRemotos-Web y PrediosRemotos-Worker antes de publicar.'
+    throw 'La web responde, pero una tarea no sigue en ejecución. Revise PrediosRemotosInt-Web y PrediosRemotosInt-Worker antes de publicar.'
 }
-Write-Host "Predios Remotos $Version instalado y verificado en http://127.0.0.1:8000." -ForegroundColor Green
-Write-Host 'Configure Cloudflare Tunnel hacia http://127.0.0.1:8000. Nunca guarde el token en Git.' -ForegroundColor Yellow
+Write-Host "Predios Remotos $Version instalado y verificado en http://127.0.0.1:8030." -ForegroundColor Green
+Write-Host 'Configure Cloudflare Tunnel hacia http://127.0.0.1:8030. Nunca guarde el token en Git.' -ForegroundColor Yellow

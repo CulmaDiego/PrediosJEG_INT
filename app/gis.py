@@ -16,8 +16,8 @@ from .config import Settings
 WGS84_TO_COLOMBIA = Transformer.from_crs("EPSG:4326", "EPSG:9377", always_xy=True)
 
 
-def validate_polygon(geometry: dict, reference_lon: float, reference_lat: float, maximum_distance_m: int = 300) -> tuple[dict, float]:
-    if maximum_distance_m < 1:
+def validate_polygon(geometry: dict, reference_lon: float, reference_lat: float, maximum_distance_m: int | None = 300) -> tuple[dict, float]:
+    if maximum_distance_m is not None and maximum_distance_m < 1:
         raise ValueError("La distancia máxima del predio debe ser positiva")
     if geometry.get("type") != "Polygon":
         raise ValueError("Solo se acepta una geometría Polygon")
@@ -45,7 +45,7 @@ def validate_polygon(geometry: dict, reference_lon: float, reference_lat: float,
         raise ValueError("El polígono debe tener un área positiva")
     reference = Point(*WGS84_TO_COLOMBIA.transform(reference_lon, reference_lat))
     maximum_distance = max(reference.distance(Point(*WGS84_TO_COLOMBIA.transform(*coord[:2]))) for coord in ring[:-1])
-    if maximum_distance > maximum_distance_m:
+    if maximum_distance_m is not None and maximum_distance > maximum_distance_m:
         raise ValueError(f"Todo el polígono debe quedar a máximo {maximum_distance_m} m del punto de referencia")
     normalized = json.loads(json.dumps(geometry, separators=(",", ":")))
     return normalized, round(projected.area, 2)

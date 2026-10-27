@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Predios Remotos · Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración">
-  <title>{% block title %}Predios Remotos{% endblock %}</title>
+  <meta name="description" content="Predios Remotos Interno · Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración">
+  <title>{% block title %}Predios Remotos Interno{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/app.css?v=12">
+  <link rel="stylesheet" href="/static/app.css?v=14">
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}admin-shell{% endblock %}">
   {% block body %}
   <aside class="sidebar">
-    <a class="brand company-brand" href="/admin" aria-label="Jorge Eliecer Gaitán, Predios Remotos, inicio">
+    <a class="brand company-brand" href="/admin" aria-label="Jorge Eliecer Gaitán, Predios Remotos Interno, inicio">
       <span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span>
-      <span class="brand-copy"><strong>Jorge Eliecer Gaitán</strong><small>Predios Remotos</small></span>
+      <span class="brand-copy"><strong>Jorge Eliecer Gaitán</strong><small>Predios Remotos Interno</small></span>
     </a>
     <nav aria-label="Navegación principal">
       <a href="/admin" {% if request.url.path == '/admin' %}class="active" aria-current="page"{% endif %}>Resumen</a>
@@ -25,13 +25,13 @@
       <a href="/admin/configuracion" {% if request.url.path.startswith('/admin/configuracion') %}class="active" aria-current="page"{% endif %}>Configuración</a>
     </nav>
     <form method="post" action="/admin/logout" class="logout-form">
-      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_csrf', '') }}">
+      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('predios_int_csrf', '') }}">
       <button class="link-button" type="submit">Cerrar sesión</button>
     </form>
   </aside>
   <main class="admin-main">
     <header class="mobile-topbar">
-      <a class="brand compact" href="/admin"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span><span class="brand-copy"><strong>Jorge E. Gaitán</strong><small>Predios Remotos</small></span></a>
+      <a class="brand compact" href="/admin"><span class="brand-symbol"><img src="/static/logo-jorge-color.png" alt=""></span><span class="brand-copy"><strong>Jorge E. Gaitán</strong><small>Predios Remotos Interno</small></span></a>
       <details>
         <summary aria-label="Abrir menú">Menú</summary>
         <nav>

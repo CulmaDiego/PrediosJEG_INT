@@ -1,136 +1,66 @@
-# Predios Remotos
+# Predios Remotos Interno
 
-Aplicación local para que una entidad organice personas por municipio, prepare una ventana privada de ortofoto para cada una y reciba polígonos dibujados desde el celular.
+Aplicación de oficina independiente de Predios Remotos. Repositorio: https://github.com/CulmaDiego/PrediosJEG_INT.git. Versión inicial interna: **1.0.0**.
 
-La solución usa una sola aplicación FastAPI, HTML/Jinja2, Leaflet + Geoman, SQLAlchemy, SQLite en modo WAL, Alembic y un trabajador local. No requiere Docker, Node como servidor, PostgreSQL ni servicios de almacenamiento en la nube.
+## Acceso en este equipo
 
-## El flujo habitual
+- Administración: http://127.0.0.1:8030/admin
+- Salud: http://127.0.0.1:8030/health y http://127.0.0.1:8030/ready
+- Código: `D:\PrediosRemotosInt\app`.
+- Base, configuración, caché y registros: `D:\PrediosRemotosInt\datos`.
+- Ortofotos: lectura de `D:\PrediosRemotos\ortofotos`, sin modificar ni duplicar los originales.
 
-```text
-PC desarrollo: cambiar código → probar → confirmar en Git → subir a GitHub → crear etiqueta.
-PC empresa: ejecutar ACTUALIZAR_PROD.ps1 con esa etiqueta → respaldo → actualización → verificación.
-```
+La instalación interna conserva una copia consistente de las personas, dibujos, catálogo y administrador de la aplicación pública. La contraseña del administrador es la misma que tenía al crear la copia. Los cambios posteriores son independientes. La clave de firma, las sesiones y los enlaces internos son propios; genere los enlaces desde este panel.
 
-## Desarrollo en Windows
+## Cobertura completa
 
-Requisitos:
+Cada registro mantiene su punto de referencia. El mapa inicia centrado allí y permite navegar por **todas las ortofotos listas asignadas al municipio**, sin radio de recorte ni límite de distancia para el dibujo. Los botones **Punto inicial** y **Ver ortofoto completa** permiten alternar entre ambas vistas. Se conserva la validación de polígonos, coordenadas, vértices y autointersecciones.
 
-- Git para Windows.
-- Python 3.12 de 64 bits.
-- QGIS 3.44.x con GDAL. El desarrollo se validó con 3.44.3; producción admite 3.44.13 indicando `-QgisRoot`. Para ECW, confirme que exista `gdal_ECW_JP2ECW.dll` y que PROJ encuentre `proj.db`.
-- Las ortofotos dentro de `Imagenes/`. La aplicación solo las lee.
+El trabajador prepara referencias VRT a los originales, una vista general de toda la cobertura y detalle cercano al punto de referencia. Al navegar, el servidor genera únicamente las teselas necesarias a la resolución original. Los PNG quedan en una caché compartida entre personas que usan los mismos archivos, además de la caché del navegador. Regenerar un registro conserva esa caché. Cambiar el tamaño o fecha de modificación de un original produce una nueva clave de caché al regenerar.
 
-Abra PowerShell en el repositorio y ejecute:
+La primera visita a una zona o nivel de detalle todavía no preparado puede requerir lectura de disco. No se descarga anticipadamente la ortofoto completa a resolución máxima ni se promete funcionamiento sin conexión. Esta estrategia permite recorrer imágenes grandes sin saturar la memoria del navegador.
 
-```powershell
-.\INICIAR_DEV.ps1
-```
+La caché compartida está en `datos/tiles/_full_cache`. No se elimina al borrar una persona. Los respaldos completos incluyen la caché; las versiones antiguas de archivos pueden limpiarse de forma programada con la aplicación detenida, manteniendo las claves referidas por los manifiestos actuales.
 
-El primer inicio crea `..\PrediosRemotos_data_dev`, instala versiones fijadas, aplica migraciones, solicita la contraseña del administrador e inicia web y trabajador. QGIS aporta GDAL, pero no se usa como servidor Python. Abra `http://127.0.0.1:8000`. Nunca usa datos de producción por defecto.
+## Inicio y operación
 
-Los enlaces públicos son estables: reiniciar una respuesta elimina sus dibujos y devuelve la persona a pendiente, pero conserva la misma URL. El panel permite copiar un enlace individual y descargar en Excel todos los enlaces o los de un municipio. Cada envío crea una versión nueva; las exportaciones GIS y Excel incluyen solo la última versión vigente de cada persona.
-
-Los datos quedan fuera del checkout:
-
-```text
-PrediosRemotos_data_dev/
-  predios.db
-  imports/  exports/  tiles/  logs/  backups/  config/
-```
-
-Para preparar una versión:
+En este equipo, `INICIAR_INTERNO.ps1` lanza un supervisor oculto que mantiene web y trabajador activos. Hay un acceso en el inicio de sesión de Windows del usuario actual. Ejecutarlo otra vez no crea otro supervisor. Los registros se guardan en `datos/logs/WEB.*.log` y `WORKER.*.log`.
 
 ```powershell
-.\PREPARAR_VERSION.ps1
+Set-Location D:\PrediosRemotosInt\app
+.\INICIAR_INTERNO.ps1
 ```
 
-El script ejecuta pruebas, comprueba dependencias y muestra el estado de Git. No publica ni sobrescribe cambios. Después muestra los comandos de commit, push y etiqueta para que usted los revise.
-
-## Primera instalación en el PC de empresa
-
-Inicie PowerShell como administrador y ejecute `INSTALAR_PROD.ps1` desde una copia del repositorio o descargue primero el archivo. El proceso comprueba Git/QGIS, clona el repositorio privado, crea el entorno, guarda secretos fuera de Git, aplica Alembic, crea el administrador y registra dos tareas de inicio de Windows.
+Los scripts de instalación y actualización usan exclusivamente `PrediosRemotosInt-Web`, `PrediosRemotosInt-Worker` y el puerto **8030**. Para instalar como tareas de arranque del sistema en otro equipo, ejecute PowerShell como administrador:
 
 ```powershell
-.\INSTALAR_PROD.ps1 `
-  -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG.git' `
-  -InstallDir 'D:\PrediosRemotos\app' `
-  -DataDir 'D:\PrediosRemotos\datos' `
-  -OrthoDir 'D:\PrediosRemotos\ortofotos' `
-  -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
-  -Version 'v0.3.6'
+.\INSTALAR_PROD.ps1 -RepoUrl 'https://github.com/CulmaDiego/PrediosJEG_INT.git' `
+  -InstallDir 'D:\PrediosRemotosInt\app' -DataDir 'D:\PrediosRemotosInt\datos' `
+  -OrthoDir 'D:\PrediosRemotos\ortofotos' -QgisRoot 'C:\Program Files\QGIS 3.44.13' `
+  -Version 'v1.0.0'
 ```
 
-Antes de activar Internet, compruebe localmente:
+## Cloudflare
+
+Configure la nueva ruta del túnel con Service URL **`http://127.0.0.1:8030`**. No cambie el destino del sitio público, que permanece en 8000. Esta entrega deja el origen interno listo; el dominio y la ruta en Cloudflare aún deben configurarse.
+
+Cuando tenga el hostname HTTPS definitivo, ajuste fuera de Git `D:\PrediosRemotosInt\datos\config\production.env`:
+
+```dotenv
+PREDIOS_PUBLIC_BASE_URL=https://su-hostname-interno
+PREDIOS_COOKIE_SECURE=true
+PREDIOS_FULL_ORTHOPHOTO=true
+```
+
+Reinicie exclusivamente los procesos internos con `REINICIAR_INTERNO.ps1` después de cambiar la configuración. Este script identifica los procesos por la ruta del checkout interno. Para restringir el hostname a la oficina, configure la política de acceso correspondiente en Cloudflare. No guarde tokens del túnel ni secretos en Git.
+
+## Desarrollo y verificación
+
+Python 3.12, FastAPI, SQLite, Leaflet/Geoman locales y GDAL de QGIS 3.44.13. El modo completo se activa por defecto mediante `Settings.from_env()`; `PREDIOS_FULL_ORTHOPHOTO=false` permite probar el comportamiento heredado. Las ventanas de modo `FULL` se preparan mediante el trabajador.
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod http://127.0.0.1:8000/ready
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock -r requirements-quality.txt
+.\scripts\VERIFICAR_CALIDAD.ps1
 ```
 
-Después instale `cloudflared`, cree un túnel hacia `http://127.0.0.1:8000` y guarde el token en el servicio de Windows de Cloudflare. No copie el token al código, `.env` del repositorio ni GitHub. La URL pública debe usar HTTPS.
-
-## Actualizar producción a una versión elegida
-
-En el PC de empresa, dentro de `D:\PrediosRemotos\app`:
-
-```powershell
-.\ACTUALIZAR_PROD.ps1 -Version v0.3.6
-```
-
-El script exige un checkout limpio y una etiqueta existente; crea y verifica un respaldo consistente, detiene servicios, instala esa versión, migra la base, reinicia y comprueba `/health` y `/ready`. Si algo falla, detiene procesos y restaura el commit y el respaldo completo.
-
-Una migración irreversible no se “deshace” con una promesa automática. La recuperación segura es restaurar juntos el código anterior y la copia completa de datos. Consulte [operación y recuperación](docs/OPERACION_PRODUCCION.md).
-
-## Ortofotos, teselas y modo sin CDN
-
-El catálogo usa `gdalinfo` sin cargar rásteres completos. El radio inicial de la ventana es 2000 m, pero el administrador puede cambiarlo en **Configuración de teselas** entre 100 y 50.000 m. El valor se guarda en la base de datos y se aplica a cada persona nueva y a las regeneraciones posteriores; las ventanas existentes y las personas que ya enviaron su dibujo se conservan.
-
-La aplicación conserva las ortofotos completas en su formato y resolución originales. La preparación crea referencias privadas a sus bandas RGB, sin recortar, reproyectar ni reducir los originales, y verifica una tesela en el punto de referencia antes de habilitar el enlace. El servidor lee solo las zonas visibles, prioriza la fuente de mayor resolución cuando se superponen y guarda PNG sin pérdida en una caché por ventana. Cada tesela lleva una máscara circular; los píxeles fuera del radio autorizado se borran en RGB y transparencia en el servidor. Antes de habilitar el enlace, el trabajador prepara la cobertura general y una zona cercana al punto en cada nivel de zoom. Al abrir el mapa, el navegador descarga y decodifica esa precarga antes de habilitar las herramientas; también adelanta las vistas de zoom cercanas al navegar. Los lectores GDAL permanecen abiertos con memoria limitada para cargar otras zonas sin iniciar un proceso por tesela. Cada petición valida el enlace, y el zoom máximo se calcula a partir de la resolución real de la fuente. Las ventanas anteriores siguen siendo compatibles; regenerarlas activa el modo ORIGINAL.
-
-Al acercar o desplazar el mapa, cada zona conserva los píxeles de un nivel ya cargado hasta que llega su detalle original. La caché del navegador limita las descargas simultáneas a cuatro, prioriza la vista actual y reintenta fallos transitorios. Al volver a una zona, los lienzos retenidos completan su detalle aunque su descarga anterior se haya cancelado. La generación usa una cola independiente y limitada, comparte las peticiones de una misma tesela y libera la conexión a la base antes de esperar: una ortofoto lenta no ocupa los hilos que sirven las páginas. Los PNG ya preparados se entregan sin gastar el límite de nuevas generaciones. Las zonas nuevas alejadas de la precarga se siguen leyendo bajo demanda; durante esa espera se muestra su cobertura general.
-
-Las personas pueden registrarse individualmente desde **Personas → Crear una persona** o cargarse de forma masiva con Excel/CSV. Al crear o importar un registro con coordenadas se agenda la preparación de su imagen. También puede seleccionar personas o usar el botón de un municipio para regenerar y verificar sus teselas. La descarga masiva de enlaces incluye las personas cuya fuente privada esté lista; las teselas detalladas se completan bajo demanda.
-
-Desde **Personas → Informe de seguimiento** se descarga un Excel con resumen de respuestas, aperturas, pendientes y estado de imágenes, más una hoja detallada por persona. El mismo informe puede limitarse a un municipio.
-
-La interfaz administrativa y el flujo público incorporan la identidad visual de **Jorge Eliecer Gaitán Ingeniería, Consultoría y Valoración**. El isotipo se presenta sin deformación junto al nombre legible en escritorio, celular, acceso administrativo y mensajes públicos. En el mapa, el usuario puede alejarse hasta encuadrar completo el radio permitido y acercarse hasta el nivel correspondiente a la resolución de la ortofoto.
-
-La interfaz fija Leaflet 1.9.4 y Leaflet-Geoman 2.18.3. Ambos ya están incluidos en el repositorio; el instalador configura `PREDIOS_ASSET_MODE=local`, sin depender del CDN. El inventario real está en [docs/ORTOFOTOS.md](docs/ORTOFOTOS.md).
-
-## Seguridad y alcance
-
-- Administrador único con Argon2id, sesión vencible, cookies `HttpOnly`, `Secure` en producción y `SameSite=Strict`.
-- CSRF, CSP, CORS no abierto, rate limiting, ORM, rutas generadas por servidor y filtros permitidos.
-- Tokens públicos aleatorios de 256 bits; solo se almacena SHA-256. Regenerar revoca el anterior.
-- Polygon WGS84 con 3–100 vértices, anillo cerrado, sin autointersecciones, área positiva y todos los vértices dentro del radio de la ventana de ortofoto de esa persona.
-- SQLite con WAL, `busy_timeout=30000`, transacciones cortas e índices para la carga prevista de un único servidor.
-
-No ponga bases, Excel reales, teselas, exportaciones, respaldos, logs, secretos ni ortofotos en Git. `.gitignore` los excluye desde el inicio.
-
-## Comandos técnicos útiles
-
-```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\scripts\VERIFICAR_CALIDAD.ps1 -InstallDependencies
-.\.venv\Scripts\python.exe -m app.worker --once
-```
-
-Antes de publicar, ejecute `VERIFICAR_CALIDAD.ps1`: instala las herramientas fijadas, comprueba dependencias, Ruff, todas las pruebas (incluido navegador) y la auditoría de seguridad. GitHub Actions y `PREPARAR_VERSION.ps1` usan ese mismo control. Las regresiones de navegador requieren Chrome o Edge; en CI su ausencia falla la ejecución.
-
-El avance y la evidencia de verificación se mantienen en [docs/ESTADO.md](docs/ESTADO.md).
-
-Para instalar o actualizar el PC definitivo, siga la [guía paso a paso de producción](docs/PASO_A_PRODUCCION.md).
-
-## Aplicar la corrección de ortofotos en esta instalación
-
-Con el código actualizado, ejecute desde PowerShell **como administrador**:
-
-```powershell
-D:\PrediosRemotos\app\APLICAR_CORRECCION_ORTOFOTOS.ps1
-```
-
-El script respalda y verifica los datos, identifica los procesos de este checkout, reinicia web y trabajador y vuelve a agendar las imágenes fallidas. Conserva las URLs y los dibujos enviados. Este permiso de Windows es necesario cuando los procesos actuales se iniciaron como administrador. No descarga código ni cambia los originales.
-
-El dibujo por puntos conserva sus vértices originales (hasta el límite de 100 del servidor), incluso al restaurar el borrador, editar o deshacer. Solo el trazo a mano se simplifica, con tolerancia inicial de 1,25 píxeles y hasta 40 vértices para conservar curvas.
-
-Si el aviso de administrador no aparece al solicitar el reinicio desde otra sesión, abra `D:\PrediosRemotos\app` en el Explorador y haga doble clic en `REINICIAR_APLICATIVO.cmd`. El acceso solicita la elevación desde su escritorio y ejecuta `APLICAR_CORRECCION_ORTOFOTOS.ps1 -SoloReiniciar`: cierra y arranca únicamente los procesos web/trabajador, sin repetir el respaldo ni la preparación de imágenes ya realizados. Si Windows rechaza la solicitud, la ventana muestra el comando que debe ejecutar desde PowerShell como administrador.
+Las pruebas incluyen autenticación, CSRF, importación, exportación, navegación de navegador, rásteres GDAL reales a 20 km del centro, envío de polígonos remotos y conservación de caché al regenerar. Bases, ortofotos, dibujos, secretos, logs, respaldos y teselas quedan fuera del repositorio.

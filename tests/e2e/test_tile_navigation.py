@@ -88,7 +88,7 @@ def slow_tile_map(tmp_path: Path):
         tile.write_bytes(png)
     # Warm the overview, leaving detailed off-center tiles to real navigation.
     (base / 'preload.json').write_text(json.dumps({'tiles': preload_tiles(lon, lat, 1800, 14, 16)}))
-    state = {'delay': 0.12, 'status': None, 'fault_path': None, 'failed_path': None, 'attempts': Counter()}
+    state = {'delay': 0.12, 'status': None, 'fault_path': None, 'failed_path': None, 'attempts': Counter(), 'app': app}
 
     @app.middleware('http')
     async def controlled_tile_response(request, call_next):
@@ -325,4 +325,53 @@ def test_fast_off_center_navigation_recovers_slow_and_transient_tiles(slow_tile_
             assert not errors
         finally:
             page.close()
+            browser.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("viewport", [{"width": 1000, "height": 850}, {"width": 390, "height": 844}])
+def test_office_map_starts_at_center_and_navigates_complete_coverage(slow_tile_map, viewport):
+    executable = next((path for path in (
+        Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe'),
+        Path(r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'),
+    ) if path.is_file()), None)
+    if executable is None:
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            pytest.fail('Se necesita Chrome o Edge')
+        pytest.skip('Se necesita Chrome o Edge')
+    url, state, lon, lat = slow_tile_map
+    app = state['app']
+    app.state.settings.full_orthophoto = True
+    base = app.state.settings.data_dir / 'tiles' / 'navigation'
+    (base / 'source.vrt').write_text('<VRTDataset/>')
+    (base / 'sources.json').write_text(json.dumps({'mode': 'FULL', 'bounds': [[lat - .2, lon - .2], [lat + .2, lon + .2]], 'sources': ['source.vrt'], 'cache_key': 'a' * 64}))
+    with app.state.Session() as db:
+        window = db.get(TileWindow, 1)
+        window.render_mode, window.min_zoom = 'FULL', 10
+        db.commit()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=str(executable), headless=True)
+        page = browser.new_page(viewport=viewport)
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        try:
+            page.goto(url)
+            expect(page.locator('#map')).to_have_attribute('data-image-ready', 'true', timeout=30000)
+            assert abs(float(page.locator('#map').get_attribute('data-center-lon')) - lon) < .001
+            assert abs(float(page.locator('#map').get_attribute('data-center-lat')) - lat) < .001
+            controls = page.get_by_role('button', name='Ver ortofoto completa').bounding_box()
+            zoom_control = page.locator('.leaflet-control-zoom').bounding_box()
+            assert controls['x'] >= zoom_control['x'] + zoom_control['width'] or controls['y'] >= zoom_control['y'] + zoom_control['height']
+            page.get_by_role('button', name='Ver ortofoto completa').click()
+            page.wait_for_function("Number(document.getElementById('map').dataset.zoom) <= 12")
+            box = page.locator('#map').bounding_box()
+            page.mouse.move(box['x'] + box['width'] * .75, box['y'] + box['height'] * .5)
+            page.mouse.down()
+            page.mouse.move(box['x'] + box['width'] * .25, box['y'] + box['height'] * .5, steps=10)
+            page.mouse.up()
+            page.wait_for_function("Math.abs(Number(document.getElementById('map').dataset.centerLon) - " + str(lon) + ") > .03")
+            page.get_by_role('button', name='Punto inicial').click()
+            page.wait_for_function("Math.abs(Number(document.getElementById('map').dataset.centerLon) - " + str(lon) + ") < .001")
+            assert not errors
+        finally:
             browser.close()

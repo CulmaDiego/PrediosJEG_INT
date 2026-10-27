@@ -1,5 +1,5 @@
 param(
-    [string]$EnvFile = 'D:\PrediosRemotos\datos\config\production.env',
+    [string]$EnvFile = 'D:\PrediosRemotosInt\datos\config\production.env',
     [switch]$SoloReiniciar
 )
 $ErrorActionPreference = 'Stop'
@@ -19,7 +19,7 @@ function Assert-Exit([string]$step) {
     if ($LASTEXITCODE -ne 0) { throw "$step falló (código $LASTEXITCODE)." }
 }
 function Start-App([string]$kind) {
-    $taskName = "PrediosRemotos-$kind"
+    $taskName = "PrediosRemotosInt-$kind"
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     if ($task) {
         Start-ScheduledTask -TaskName $taskName
@@ -56,13 +56,13 @@ do {
         }
     }
 } while ($added)
-$listener = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+$listener = Get-NetTCPConnection -LocalPort 8030 -State Listen -ErrorAction SilentlyContinue
 if ($listener -and -not $targetIds.Contains([int]$listener.OwningProcess)) {
-    throw 'El puerto 8000 pertenece a un proceso que no se pudo identificar como esta aplicación. No se detuvo.'
+    throw 'El puerto 8030 pertenece a un proceso que no se pudo identificar como esta aplicación. No se detuvo.'
 }
 try {
     foreach ($kind in 'Web','Worker') {
-        $task = Get-ScheduledTask -TaskName "PrediosRemotos-$kind" -ErrorAction SilentlyContinue
+        $task = Get-ScheduledTask -TaskName "PrediosRemotosInt-$kind" -ErrorAction SilentlyContinue
         if ($task) { Stop-ScheduledTask -TaskName $task.TaskName }
     }
     foreach ($processId in $targetIds) {
@@ -82,8 +82,8 @@ $ready = $false
 for ($attempt = 0; $attempt -lt 15; $attempt++) {
     Start-Sleep -Seconds 2
     try {
-        $health = Invoke-RestMethod 'http://127.0.0.1:8000/health' -TimeoutSec 3
-        $state = Invoke-RestMethod 'http://127.0.0.1:8000/ready' -TimeoutSec 3
+        $health = Invoke-RestMethod 'http://127.0.0.1:8030/health' -TimeoutSec 3
+        $state = Invoke-RestMethod 'http://127.0.0.1:8030/ready' -TimeoutSec 3
         if ($health.status -eq 'ok' -and $state.status -eq 'ready') { $ready = $true; break }
     } catch { }
 }
